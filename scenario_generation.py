@@ -123,5 +123,5 @@ for t in range(1, 25):
 #         k_w = SCENARIOS_WIND[((k - 1) // (num_power_balance_scenarios * num_price_scenarios)) % num_scenarios_wind]
 #         scenarios_data[(t, k)] = [balance_scenarios[(t, k_b)], price_scenarios[(t, k_p)],
 #                                   wind_power_scenarios[(t, k_w)]]
-# test
+# test 2
 
