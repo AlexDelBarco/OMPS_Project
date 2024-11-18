@@ -61,7 +61,7 @@ WIND_FARMS = ['WT1', 'WT2', 'WT3', 'WT4', 'WT5', 'WT6']
 
 dfs = {}
 wind_power_scenarios = {}
-p_max_wind = 12
+p_max_wind = 48/6
 
 for k in range(1, 7):
     file_path = f'data/wind {k}.out'
