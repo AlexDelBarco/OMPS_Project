@@ -10,33 +10,25 @@ np.random.seed(1)
 
 
 prices_data = [
-    2.02, 0.04, 0.14, 0.73, 17.47, 36.22, 51.59, 74.26,
-    74.26, 64.81, 51.03, 42.64, 40.00, 40.22, 42.08, 48.53,
-    51.67, 79.67, 92.92, 113.99, 124.52, 104.46, 90.10, 84.10
+    51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
+    112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
+    155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
+
+
 ]
 
-#num_power_balance_scenarios = 3
-num_price_scenarios = 20
-num_scenarios_wind = 20
+#TODO increase in necessary
+num_price_scenarios = 10
+num_scenarios_wind = 10
 
-#SCENARIOS_BALANCE = [f'"B{k}"' for k in range(1, num_power_balance_scenarios + 1)]
 SCENARIOS_PRICE = [f'"P{k}"' for k in range(1, num_price_scenarios + 1)]
 SCENARIOS_WIND = [f'"V{k}"' for k in range(1, num_scenarios_wind + 1)]
 
-#num_scenarios_total = num_price_scenarios * num_power_balance_scenarios * num_scenarios_wind
 num_scenarios_total = num_price_scenarios * num_scenarios_wind
 
 SCENARIOS_TOT = [k for k in range(1, num_scenarios_total + 1)]
 
 SCENARIOS = np.sort(np.random.choice(np.arange(1, num_scenarios_total + 1), size=num_scenarios_total, replace=False))
-#SCENARIOS_OUT = np.setdiff1d(SCENARIOS_TOT, SCENARIOS)
-
-# Generate binary variables representing deficit (0) or excess (1)
-# balance_scenarios = {}
-# for k in SCENARIOS_BALANCE:
-#     for t in range(1, 25):
-#         power_balance = np.random.randint(0, 2)
-#         balance_scenarios[t, k] = power_balance
 
 ## Generate price scenarios using normal distribution
 price_scenarios = {}
@@ -69,11 +61,10 @@ WIND_FARMS = ['WT1', 'WT2', 'WT3', 'WT4', 'WT5', 'WT6']
 
 dfs = {}
 wind_power_scenarios = {}
-#TODO check 200MW??
-p_max_wind = 200 / 6
+p_max_wind = 12
 
 for k in range(1, 7):
-    file_path = f'Assignment_ideas/data/wind {k}.out'
+    file_path = f'data/wind {k}.out'
 
     with open(file_path, 'r') as file:
         file_contents = file.readlines()
@@ -110,17 +101,11 @@ plt.show()
 
 ##
 scenarios_data = {}
+#first index (t): time
+#second index (k): scenario
 for t in range(1, 25):
     for k in range(1, num_scenarios_total + 1):
         k_p = SCENARIOS_PRICE[((k - 1) // num_scenarios_wind) % num_price_scenarios]
         k_w = SCENARIOS_WIND[(k - 1) % num_scenarios_wind]
         scenarios_data[(t, k)] = [price_scenarios[(t, k_p)], wind_power_scenarios[(t, k_w)]]
-
-# for t in range(1, 25):
-#     for k in range(1, num_scenarios_total + 1):
-#         k_b = SCENARIOS_BALANCE[(k - 1) % num_power_balance_scenarios]
-#         k_p = SCENARIOS_PRICE[((k - 1) // num_power_balance_scenarios) % num_price_scenarios]
-#         k_w = SCENARIOS_WIND[((k - 1) // (num_power_balance_scenarios * num_price_scenarios)) % num_scenarios_wind]
-#         scenarios_data[(t, k)] = [balance_scenarios[(t, k_b)], price_scenarios[(t, k_p)],
-#                                   wind_power_scenarios[(t, k_w)]]
 
