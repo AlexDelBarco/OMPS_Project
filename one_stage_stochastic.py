@@ -16,9 +16,9 @@ class InputData:
             SCENARIOS: list,
             TIME: list,
             generator_cost: float,
-            generator_capacity: dict[str, dict[str, float] | dict[str, float] | dict[str, float] | dict[str, float] | dict[str, float]],
-            price: dict[str, dict[str, float] | dict[str, float] | dict[str, float] | dict[str, float] | dict[str, float]],
-            pi: dict[str, float],
+            generator_capacity: dict[int, dict[int, float] | dict[int, float] | dict[int, float] | dict[int, float] | dict[int, float]],
+            price: dict[int, dict[int, float] | dict[int, float] | dict[int, float] | dict[int, float] | dict[int, float]],
+            pi: dict[int, float],
             rho_charge: float,
             rho_discharge: float,
             soc_max: float,
@@ -57,54 +57,54 @@ class StochasticOfferingStrategy():
 
     def _build_variables(self):
         self.variables.generator_production = {
-            (k, t): self.model.addVar(
+            (t, k): self.model.addVar(
                 lb=0, ub=GRB.INFINITY, name='Electricity production'
             )
-            for k in self.data.SCENARIOS
             for t in self.data.TIME
+            for k in self.data.SCENARIOS
         }
 
         self.variables.charging_power = {
-            (k, t): self.model.addVar(
+            (t, k): self.model.addVar(
                 lb=0, ub=GRB.INFINITY, name='Charging power'
             )
-            for k in self.data.SCENARIOS
             for t in self.data.TIME
+            for k in self.data.SCENARIOS
         }
 
         self.variables.discharging_power = {
-            (k, t): self.model.addVar(
-                lb=0, ub=GRB.INFINITY, name='Disharging power'
+            (t, k): self.model.addVar(
+                lb=0, ub=GRB.INFINITY, name='Discharging power'
             )
-            for k in self.data.SCENARIOS
             for t in self.data.TIME
+            for k in self.data.SCENARIOS
         }
 
         self.variables.soc = {
-            (k, t): self.model.addVar(
+            (t, k): self.model.addVar(
                 lb=0, ub=GRB.INFINITY, name='State of charge'
             )
-            for k in self.data.SCENARIOS
             for t in self.data.TIME
+            for k in self.data.SCENARIOS
         }
 
     def _build_constraints(self):
         self.constraints.total_power_constraint = {
-            (k, t): self.model.addLConstr(
-                self.data.generator_capacity[k][t] - self.variables.charging_power[k][t] + self.variables.dischaging_power[k][t],
+            (t, k): self.model.addLConstr(
+                self.data.generator_capacity[t][k] - self.variables.charging_power[(t,k)] + self.variables.discharging_power[(t,k)],
                 GRB.EQUAL,
-                self.variables.generator_production[k][t],
+                self.variables.generator_production[(t,k)],
                 name=f'Max production constraint_{k}_{t}'
             )
-            for k in self.data.SCENARIOS
             for t in self.data.TIME
+            for k in self.data.SCENARIOS
         }
 
         self.constraints.max_production_constraints = {
             (k, t): self.model.addLConstr(
-                self.variables.charging_power[k][t],
+                self.variables.charging_power[(t,k)],
                 GRB.LESS_EQUAL,
-                self.data.generator_capacity[k][t],
+                self.data.generator_capacity[t][k],
                 name=f'Max production constraint_{k}_{t}'
             )
             for k in self.data.SCENARIOS
@@ -113,7 +113,7 @@ class StochasticOfferingStrategy():
 
         self.constraints.SOC_max = {
             (k, t): self.model.addLConstr(
-                self.variables.soc[k][t],
+                self.variables.soc[(t,k)],
                 GRB.LESS_EQUAL,
                 self.data.soc_max,
                 name=f'Max state of charge constraint_{k}_{t}'
@@ -131,6 +131,7 @@ class StochasticOfferingStrategy():
             )
             for k in self.data.SCENARIOS
             for t in self.data.TIME
+            if t > 1
         }
 
         self.constraints.SOC_init = {
@@ -201,28 +202,28 @@ class StochasticOfferingStrategy():
 
 if __name__ == '__main__':
     generator_capacity_values = {
-        'S1': {'T1': 88.31, 'T2': 136.25, 'T3': 85.61, 'T4': 137.09, 'T5': 146.05},
-        'S2': {'T1': 134.67, 'T2': 96.76, 'T3': 139.7, 'T4': 96.58, 'T5': 117.66},
-        'S3': {'T1': 112.06, 'T2': 86.55, 'T3': 79.03, 'T4': 115.01, 'T5': 115.76},
-        'S4': {'T1': 85.12, 'T2': 122.11, 'T3': 83.61, 'T4': 80.92, 'T5': 90.75},
-        'S5': {'T1': 111.76, 'T2': 141.14, 'T3': 135.55, 'T4': 75.47, 'T5': 118.62}
+        1: {1: 88.31, 2: 136.25, 3: 85.61, 4: 137.09, 5: 146.05},
+        2: {1: 134.67, 2: 96.76, 3: 139.7, 4: 96.58, 5: 117.66},
+        3: {1: 112.06, 2: 86.55, 3: 79.03, 4: 115.01, 5: 115.76},
+        4: {1: 85.12, 2: 122.11, 3: 83.61, 4: 80.92, 5: 90.75},
+        5: {1: 111.76, 2: 141.14, 3: 135.55, 4: 75.47, 5: 118.62}
     }
 
-    price_values = {
-        'S1': {'T1': 88.31, 'T2': 136.25, 'T3': 85.61, 'T4': 137.09, 'T5': 146.05},
-        'S2': {'T1': 134.67, 'T2': 96.76, 'T3': 139.7, 'T4': 96.58, 'T5': 117.66},
-        'S3': {'T1': 112.06, 'T2': 86.55, 'T3': 79.03, 'T4': 115.01, 'T5': 115.76},
-        'S4': {'T1': 85.12, 'T2': 122.11, 'T3': 83.61, 'T4': 80.92, 'T5': 90.75},
-        'S5': {'T1': 111.76, 'T2': 141.14, 'T3': 135.55, 'T4': 75.47, 'T5': 118.62}
+    price_values =  {
+        1: {1: 88.31, 2: 136.25, 3: 85.61, 4: 137.09, 5: 146.05},
+        2: {1: 134.67, 2: 96.76, 3: 139.7, 4: 96.58, 5: 117.66},
+        3: {1: 112.06, 2: 86.55, 3: 79.03, 4: 115.01, 5: 115.76},
+        4: {1: 85.12, 2: 122.11, 3: 83.61, 4: 80.92, 5: 90.75},
+        5: {1: 111.76, 2: 141.14, 3: 135.55, 4: 75.47, 5: 118.62}
     }
 
     input_data = InputData(
-        SCENARIOS=['S1', 'S2', 'S3', 'S4', 'S5'],
-        TIME=['T1', 'T2', 'T3', 'T4', 'T5'],
+        SCENARIOS=[1, 2, 3, 4, 5],
+        TIME=[1, 2, 3, 4, 5],
         generator_cost=15,
         generator_capacity=generator_capacity_values,
         price=price_values,
-        pi={'S1': 0.25, 'S2': 0.25, 'S3': 0.25, 'S4': 0.25},
+        pi={1: 0.2, 2: 0.2, 3: 0.25, 4: 0.25, 5: 0.25},
         rho_charge=1.5,
         rho_discharge=1.5,
         soc_max = 500,
