@@ -312,8 +312,8 @@ if __name__ == '__main__':
 
     model = StochasticOfferingStrategy(input_data)
 
-    #model.run()
-    #model.display_results()
+    model.run()
+    model.display_results()
     #model_PI = StochasticOfferingStrategy(input_data)
     #model_PI.run()
     #model_PI.display_results()
