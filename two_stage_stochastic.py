@@ -151,19 +151,20 @@ class StochasticOfferingStrategy():
                 GRB.LESS_EQUAL,
                 self.data.soc_max,
                 name=f'Max state of charge constraint_{t}_{k}'
-            ) for t in self.data.TIME
+            )
             for k in self.data.SCENARIOS
+            for t in self.data.TIME
         }
 
         self.constraints.SOC_time = {
             (t, k): self.model.addLConstr(
-                self.variables.soc[(k,t-1)] + (self.variables.charging_power[(t)] + self.variables.balancing_charge[(t,k)])* self.data.rho_charge - (self.variables.discharging_power[(t)]+self.variables.balancing_discharge[(t,k)]) * (1/self.data.rho_discharge),
+                self.variables.soc[(t-1,k)] + (self.variables.charging_power[(t)] + self.variables.balancing_charge[(t,k)])* self.data.rho_charge - (self.variables.discharging_power[(t)]+self.variables.balancing_discharge[(t,k)]) * (1/self.data.rho_discharge),
                 GRB.EQUAL,
                 self.variables.soc[(t,k)],
                 name=f'SOC time constraint_{t}_{k}'
             )
-            for t in self.data.TIME
             for k in self.data.SCENARIOS
+            for t in self.data.TIME
             if t > 1
         }
 
@@ -171,11 +172,11 @@ class StochasticOfferingStrategy():
             (t, k): self.model.addLConstr(
                 self.data.soc_init + (self.variables.charging_power[(t)] + self.variables.balancing_charge[(t,k)]) * self.data.rho_charge - (self.variables.discharging_power[(t)]+self.variables.balancing_discharge[(t,k)]) * (1/self.data.rho_discharge),
                 GRB.EQUAL,
-                self.variables.soc[(k,1)],
+                self.variables.soc[(1,k)],
                 name=f'SOC initial constraint{t}_{k}'
             )
-            for t in self.data.TIME
             for k in self.data.SCENARIOS
+            for t in self.data.TIME
         }
 
 
@@ -198,6 +199,7 @@ class StochasticOfferingStrategy():
         self._build_objective_function()
         #self.model.update()
 
+    #Save results is not changed yet
     def _save_results(self):
         self.results.objective_value = self.model.ObjVal
         self.results.generator_production = [
@@ -255,6 +257,7 @@ if __name__ == '__main__':
             5: {1: 111.76, 2: 141.14, 3: 135.55, 4: 75.47, 5: 118.62}
         }
 
+
         input_data = InputData(
             SCENARIOS=[1, 2, 3, 4, 5],
             TIME=[1, 2, 3, 4, 5],
@@ -273,12 +276,42 @@ if __name__ == '__main__':
 
         max_i = max(key[0] for key in scenario_data.keys())
         max_j = max(key[1] for key in scenario_data.keys())
-        print(max_i, max_j)
         scenarios = [j for j in range(1, max_j+1)]
         time = [i for i in range(1, max_i+1)]
-        print(time)
 
-    #model = StochasticOfferingStrategy(input_data)
+        #Equal probability of each scenario 1/100
+        pi = {k: 1/max_j for k in scenarios}
+
+        price_values = {}
+        generator_capacity_values = {}
+
+        #differentiating the scenario data in tow seperate collections price_values and generator_capacity
+        for (t, k), values in scenario_data.items():
+            if t not in price_values:
+                price_values[t] = {}
+            if t not in generator_capacity_values:
+                generator_capacity_values[t] = {}
+
+            price_values[t][k] = values[0]
+            generator_capacity_values[t][k] = values[1]
+
+
+        input_data = InputData(
+            SCENARIOS=scenarios,
+            TIME=time,
+            generator_cost=15,
+            generator_capacity=generator_capacity_values,
+            DA_price=10,
+            B_price=price_values,
+            pi=pi,
+            rho_charge=1.5,
+            rho_discharge=1.5,
+            soc_max=500,
+            soc_init=50
+        )
+
+    model = StochasticOfferingStrategy(input_data)
+
     #model.run()
     #model.display_results()
     #model_PI = StochasticOfferingStrategy(input_data)
