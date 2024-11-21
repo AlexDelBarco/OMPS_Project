@@ -14,7 +14,7 @@ prices_data_DA = [
     112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
     155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
 ]
-#TODO
+
 prices_data_B = [
     51.49, 108.89, 90.76, 90.76, 42.72, -2.00, 11.89, 40.50, 67.98, 42.00, 42.00,
     46.92, 114.02, 127.40, 134.02, 142.18, 198.65, 402.30, 154.10, 148.30,
@@ -35,11 +35,54 @@ num_scenarios_total = num_price_scenarios * num_scenarios_wind
 SCENARIOS_TOT = [k for k in range(1, num_scenarios_total + 1)]
 
 SCENARIOS = np.sort(np.random.choice(np.arange(1, num_scenarios_total + 1), size=num_scenarios_total, replace=False))
+##
+price_scenarios_DA = {}
+price_scenarios_B = {}
+p_B = plt.figure(figsize=(12, 12))
+p_DA = plt.figure(figsize=(12, 12))
+k_x = 0
+
+for k in SCENARIOS_PRICE:
+    k_x = k_x + 1
+    plot_values_k = []
+    plot_values_B = []
+    for t in range(1, 25):
+        coeff_prices = abs(np.random.normal(1, 0.1))
+        price_scenarios_DA[t, k] = coeff_prices * prices_data_DA[t - 1]
+        price_scenarios_B[t, k] = coeff_prices * prices_data_B[t - 1]
+        plot_values_k.append(coeff_prices * prices_data_DA[t - 1])
+        plot_values_B.append(coeff_prices * prices_data_B[t - 1])
+
+    #ax_B = p_B.add_subplot(len(SCENARIOS_PRICE), 1, k_x)
+    ax_B.plot(range(0, 24), plot_values_k, linewidth=1.5, label=f'P{k_x}')
+    ax_B.set_xlabel('Time (hours)', fontsize=12)
+    ax_B.set_ylabel('Electricity Price (EUR/MWh)', fontsize=12)
+    #ax_B.set_xticks(fontsize=12)
+    #ax_B.set_yticks(fontsize=12)
+    ax_B.grid(True)
+    ax_B.set_title(f'Price scenarios DA - P{k_x}', fontsize=12)
+    ax_B.legend(fontsize=7, loc='upper left')
+
+    ax_DA = p_DA.add_subplot(len(SCENARIOS_PRICE), 1, k_x)
+    ax_DA.plot(range(0, 24), plot_values_B, linewidth=1.5, label=f'P{k_x}')
+    ax_DA.set_xlabel('Time (hours)', fontsize=12)
+    ax_DA.set_ylabel('Electricity Price (EUR/MWh)', fontsize=12)
+    #ax_DA.set_xticks(fontsize=12)
+    #ax_DA.set_yticks(fontsize=12)
+    ax_DA.grid(True)
+    ax_DA.set_title(f'Price scenarios B - P{k_x}', fontsize=12)
+    ax_DA.legend(fontsize=7, loc='upper left')
+
+p_B.tight_layout()
+p_DA.tight_layout()
+plt.show()
+
+
 
 ## Generate price scenarios using normal distribution
 price_scenarios_DA = {}
 price_scenarios_B = {}
-# plt.figure(figsize=(12, 12))
+plt.figure(figsize=(6, 6))
 k_x = 0
 for k in SCENARIOS_PRICE:
     k_x = k_x + 1
@@ -51,11 +94,9 @@ for k in SCENARIOS_PRICE:
         price_scenarios_B[t, k] = coeff_prices * prices_data_B[t - 1]
         plot_values_k.append(coeff_prices * prices_data_DA[t - 1])
         plot_values_B.append(coeff_prices * prices_data_B[t - 1])
-    #plt.plot(range(0, 24), plot_values_k, linewidth=1.5, label=f'P{k_x}')
+    plt.plot(range(0, 24), plot_values_k, linewidth=1.5, label=f'P{k_x}')
     #plt.plot(range(0, 24), plot_values_B, linewidth=1.5, label=f'P{k_x}')
 
-plt.figure()
-plt.plot(range(0, 24), plot_values_k, linewidth=1.5, label=f'P{k_x}')
 plt.xlabel('Time (hours)', fontsize=12)
 plt.ylabel('Electricity Price (EUR/MWh)', fontsize=12)
 plt.xticks(fontsize=12)
@@ -63,31 +104,6 @@ plt.yticks(fontsize=12)
 plt.grid(True)
 plt.title('Price scenarios DA', fontsize=12)
 plt.legend(fontsize=7, loc='upper left')
-plt.show()
-
-plt.figure()
-plt.plot(range(0, 24), plot_values_B, linewidth=1.5, label=f'P{k_x}')
-plt.xlabel('Time (hours)', fontsize=12)
-plt.ylabel('Electricity Price (EUR/MWh)', fontsize=12)
-plt.xticks(fontsize=12)
-plt.yticks(fontsize=12)
-plt.grid(True)
-plt.title('Price scenarios B', fontsize=12)
-plt.legend(fontsize=7, loc='upper left')
-plt.show()
-
-
-##
-#plt.size = (6, 6)
-#plt.xlim(0,24)
-plt.xlabel('Time (hours)', fontsize=12)
-plt.ylabel('Electricity Price (EUR/MWh)', fontsize=12)
-plt.xticks(fontsize=12)
-plt.yticks(fontsize=12)
-plt.grid(True)
-plt.title('Price scenarios', fontsize=12)
-plt.legend(fontsize = 7, loc='upper left')
-#plt.savefig('figures/price_scenarios.png', dpi=600, bbox_inches='tight')
 plt.show()
 
 ### WT Power definition
