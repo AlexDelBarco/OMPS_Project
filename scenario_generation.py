@@ -164,3 +164,4 @@ for t in range(1, 25):
         scenarios_data_WindProd[(t,k)] [wind_power_scenarios[(t, k_w)]]
         #scenarios_data_OS[(t, k)] = [price_scenarios[(t, k_p)], wind_power_scenarios[(t, k_w)]]
 
+
