@@ -16,8 +16,8 @@ class InputData:
             SCENARIOS: list,
             TIME: list,
             generator_cost: float,
-            generator_capacity: dict[str, dict[str, float] | dict[str, float] | dict[str, float] | dict[str, float] | dict[str, float]],
-            price: dict[str, dict[str, float] | dict[str, float] | dict[str, float] | dict[str, float] | dict[str, float]],
+            generator_capacity: dict[str, dict[str, float]],
+            price: dict[str, dict[str, float]],
             pi: dict[str, float],
             rho_charge: float,
             rho_discharge: float,
@@ -91,7 +91,7 @@ class StochasticOfferingStrategy():
     def _build_constraints(self):
         self.constraints.total_power_constraint = {
             (k, t): self.model.addLConstr(
-                self.data.generator_capacity[k][t] - self.variables.charging_power[k][t] + self.variables.dischaging_power[k][t],
+                self.data.generator_capacity[k][t] - self.variables.charging_power[(k, t)] + self.variables.discharging_power[(k, t)],
                 GRB.EQUAL,
                 self.variables.generator_production[k][t],
                 name=f'Max production constraint_{k}_{t}'
