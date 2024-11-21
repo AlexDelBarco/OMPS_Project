@@ -9,13 +9,19 @@ import re
 np.random.seed(1)
 
 
-prices_data = [
+prices_data_DA = [
     51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
     112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
     155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
-
+]
+#TODO
+prices_data_B = [
+    51.49, 108.89, 90.76, 90.76, 42.72, -2.00, 11.89, 40.50, 67.98, 42.00, 42.00,
+    46.92, 114.02, 127.40, 134.02, 142.18, 198.65, 402.30, 154.10, 148.30,
+    138.59, 129.44, 122.89, 112.47
 
 ]
+
 
 #TODO increase in necessary
 num_price_scenarios = 10
@@ -31,19 +37,47 @@ SCENARIOS_TOT = [k for k in range(1, num_scenarios_total + 1)]
 SCENARIOS = np.sort(np.random.choice(np.arange(1, num_scenarios_total + 1), size=num_scenarios_total, replace=False))
 
 ## Generate price scenarios using normal distribution
-price_scenarios = {}
+price_scenarios_DA = {}
+price_scenarios_B = {}
 # plt.figure(figsize=(12, 12))
 k_x = 0
 for k in SCENARIOS_PRICE:
     k_x = k_x + 1
     plot_values_k = []
+    plot_values_B = []
     for t in range(1, 25):
         coeff_prices = abs(np.random.normal(1, 0.1))
-        price_scenarios[t, k] = coeff_prices * prices_data[t - 1]
-        plot_values_k.append(coeff_prices * prices_data[t - 1])
-    plt.plot(range(0, 24), plot_values_k, linewidth=1.5, label=f'P{k_x}')
+        price_scenarios_DA[t, k] = coeff_prices * prices_data_DA[t - 1]
+        price_scenarios_B[t, k] = coeff_prices * prices_data_B[t - 1]
+        plot_values_k.append(coeff_prices * prices_data_DA[t - 1])
+        plot_values_B.append(coeff_prices * prices_data_B[t - 1])
+    #plt.plot(range(0, 24), plot_values_k, linewidth=1.5, label=f'P{k_x}')
+    #plt.plot(range(0, 24), plot_values_B, linewidth=1.5, label=f'P{k_x}')
+
+plt.figure()
+plt.plot(range(0, 24), plot_values_k, linewidth=1.5, label=f'P{k_x}')
+plt.xlabel('Time (hours)', fontsize=12)
+plt.ylabel('Electricity Price (EUR/MWh)', fontsize=12)
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+plt.grid(True)
+plt.title('Price scenarios DA', fontsize=12)
+plt.legend(fontsize=7, loc='upper left')
+plt.show()
+
+plt.figure()
+plt.plot(range(0, 24), plot_values_B, linewidth=1.5, label=f'P{k_x}')
+plt.xlabel('Time (hours)', fontsize=12)
+plt.ylabel('Electricity Price (EUR/MWh)', fontsize=12)
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+plt.grid(True)
+plt.title('Price scenarios B', fontsize=12)
+plt.legend(fontsize=7, loc='upper left')
+plt.show()
 
 
+##
 #plt.size = (6, 6)
 #plt.xlim(0,24)
 plt.xlabel('Time (hours)', fontsize=12)
@@ -100,12 +134,17 @@ plt.legend(fontsize=7, loc='upper left')
 plt.show()
 
 ##
-scenarios_data = {}
-#first index (t): time
-#second index (k): scenario
+scenarios_data_DAprices = {}
+scenarios_data_Bprices = {}
+scenarios_data_WindProd = {}
+#first index (t): time      - fist value: price
+#second index (k): scenario - second value - wind production
 for t in range(1, 25):
     for k in range(1, num_scenarios_total + 1):
         k_p = SCENARIOS_PRICE[((k - 1) // num_scenarios_wind) % num_price_scenarios]
         k_w = SCENARIOS_WIND[(k - 1) % num_scenarios_wind]
-        scenarios_data[(t, k)] = [price_scenarios[(t, k_p)], wind_power_scenarios[(t, k_w)]]
+        scenarios_data_DAprices[(t,k)] = [price_scenarios_DA[(t, k_p)]]
+        scenarios_data_Bprices[(t,k)] [price_scenarios_B[(t, k_p)]]
+        scenarios_data_WindProd[(t,k)] [wind_power_scenarios[(t, k_w)]]
+        #scenarios_data_OS[(t, k)] = [price_scenarios[(t, k_p)], wind_power_scenarios[(t, k_w)]]
 
