@@ -3,7 +3,7 @@ import numpy as np
 
 def generate_scenarios(num_price_scenarios, num_wind_scenarios):
     np.random.seed(1)
-
+    #euro/MWh
     prices_data_DA = [
         51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
         112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
