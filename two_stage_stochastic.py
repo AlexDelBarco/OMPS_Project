@@ -115,7 +115,7 @@ class StochasticOfferingStrategy():
 
 
         self.constraints.balancing_power = {
-            (t,k): self.model.addLConstr(
+            (t,k): self.model.addConstr(
                 self.data.generator_capacity[(t,k)] - self.variables.generator_production[t] - self.variables.balancing_charge[(t,k)] + self.variables.balancing_discharge[(t,k)],
                 GRB.EQUAL,
                 self.variables.balancing_power[(t,k)]
@@ -124,7 +124,7 @@ class StochasticOfferingStrategy():
             for k in self.data.SCENARIOS
         }
         self.constraints.total_power_constraint = {
-            (t, k): self.model.addLConstr(
+            (t, k): self.model.addConstr(
                 self.data.generator_capacity[(t,k)] - self.variables.charging_power[(t)] + self.variables.discharging_power[(t)],
                 GRB.EQUAL,
                 self.variables.generator_production[(t)],
@@ -135,7 +135,7 @@ class StochasticOfferingStrategy():
         }
 
         self.constraints.max_production_constraints = {
-            (t, k): self.model.addLConstr(
+            (t, k): self.model.addConstr(
                 self.variables.charging_power[(t)] + self.variables.balancing_charge[(t,k)],
                 GRB.LESS_EQUAL,
                 self.data.generator_capacity[(t,k)],
@@ -146,7 +146,7 @@ class StochasticOfferingStrategy():
         }
 
         self.constraints.SOC_max = {
-            (t, k): self.model.addLConstr(
+            (t, k): self.model.addConstr(
                 self.variables.soc[(t,k)],
                 GRB.LESS_EQUAL,
                 self.data.soc_max,
@@ -157,7 +157,7 @@ class StochasticOfferingStrategy():
         }
 
         self.constraints.SOC_time = {
-            (t, k): self.model.addLConstr(
+            (t, k): self.model.addConstr(
                 self.variables.soc[(t-1,k)] + (self.variables.charging_power[(t)] + self.variables.balancing_charge[(t,k)])* self.data.rho_charge - (self.variables.discharging_power[(t)]+self.variables.balancing_discharge[(t,k)]) * (1/self.data.rho_discharge),
                 GRB.EQUAL,
                 self.variables.soc[(t,k)],
@@ -169,14 +169,13 @@ class StochasticOfferingStrategy():
         }
 
         self.constraints.SOC_init = {
-            (t, k): self.model.addLConstr(
-                self.data.soc_init + (self.variables.charging_power[(t)] + self.variables.balancing_charge[(t,k)]) * self.data.rho_charge - (self.variables.discharging_power[(t)]+self.variables.balancing_discharge[(t,k)]) * (1/self.data.rho_discharge),
+            (k): self.model.addConstr(
+                self.data.soc_init + (self.variables.charging_power[(1)] + self.variables.balancing_charge[(1,k)]) * self.data.rho_charge - (self.variables.discharging_power[(1)]+self.variables.balancing_discharge[(1,k)]) * (1/self.data.rho_discharge),
                 GRB.EQUAL,
                 self.variables.soc[(1,k)],
-                name=f'SOC initial constraint{t}_{k}'
+                name=f'SOC initial constraint{1}_{k}'
             )
             for k in self.data.SCENARIOS
-            for t in self.data.TIME
         }
 
 
@@ -185,9 +184,9 @@ class StochasticOfferingStrategy():
             gp.quicksum(
                 gp.quicksum(
                     (self.data.DA_price-self.data.generator_cost)*self.variables.generator_production[t]+ self.data.pi[k]*(self.data.B_price[(t,k)]-self.data.generator_cost)*self.variables.balancing_power[(t,k)]
-                        for k in self.data.SCENARIOS
+                    for t in self.data.TIME
                 )
-                for t in self.data.TIME
+                for k in self.data.SCENARIOS
             )
         )
         self.model.setObjective(objective, GRB.MAXIMIZE)
