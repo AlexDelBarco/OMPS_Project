@@ -35,47 +35,6 @@ num_scenarios_total = num_price_scenarios * num_scenarios_wind
 SCENARIOS_TOT = [k for k in range(1, num_scenarios_total + 1)]
 
 SCENARIOS = np.sort(np.random.choice(np.arange(1, num_scenarios_total + 1), size=num_scenarios_total, replace=False))
-##
-price_scenarios_DA = {}
-price_scenarios_B = {}
-p_B = plt.figure(figsize=(12, 12))
-p_DA = plt.figure(figsize=(12, 12))
-k_x = 0
-
-for k in SCENARIOS_PRICE:
-    k_x = k_x + 1
-    plot_values_k = []
-    plot_values_B = []
-    for t in range(1, 25):
-        coeff_prices = abs(np.random.normal(1, 0.1))
-        price_scenarios_DA[t, k] = coeff_prices * prices_data_DA[t - 1]
-        price_scenarios_B[t, k] = coeff_prices * prices_data_B[t - 1]
-        plot_values_k.append(coeff_prices * prices_data_DA[t - 1])
-        plot_values_B.append(coeff_prices * prices_data_B[t - 1])
-
-    #ax_B = p_B.add_subplot(len(SCENARIOS_PRICE), 1, k_x)
-    ax_B.plot(range(0, 24), plot_values_k, linewidth=1.5, label=f'P{k_x}')
-    ax_B.set_xlabel('Time (hours)', fontsize=12)
-    ax_B.set_ylabel('Electricity Price (EUR/MWh)', fontsize=12)
-    #ax_B.set_xticks(fontsize=12)
-    #ax_B.set_yticks(fontsize=12)
-    ax_B.grid(True)
-    ax_B.set_title(f'Price scenarios DA - P{k_x}', fontsize=12)
-    ax_B.legend(fontsize=7, loc='upper left')
-
-    ax_DA = p_DA.add_subplot(len(SCENARIOS_PRICE), 1, k_x)
-    ax_DA.plot(range(0, 24), plot_values_B, linewidth=1.5, label=f'P{k_x}')
-    ax_DA.set_xlabel('Time (hours)', fontsize=12)
-    ax_DA.set_ylabel('Electricity Price (EUR/MWh)', fontsize=12)
-    #ax_DA.set_xticks(fontsize=12)
-    #ax_DA.set_yticks(fontsize=12)
-    ax_DA.grid(True)
-    ax_DA.set_title(f'Price scenarios B - P{k_x}', fontsize=12)
-    ax_DA.legend(fontsize=7, loc='upper left')
-
-p_B.tight_layout()
-p_DA.tight_layout()
-plt.show()
 
 
 
@@ -153,15 +112,15 @@ plt.show()
 scenarios_data_DAprices = {}
 scenarios_data_Bprices = {}
 scenarios_data_WindProd = {}
-#first index (t): time      - fist value: price
-#second index (k): scenario - second value - wind production
+#first index (t): time
+#second index (k): scenario
 for t in range(1, 25):
     for k in range(1, num_scenarios_total + 1):
         k_p = SCENARIOS_PRICE[((k - 1) // num_scenarios_wind) % num_price_scenarios]
         k_w = SCENARIOS_WIND[(k - 1) % num_scenarios_wind]
         scenarios_data_DAprices[(t,k)] = [price_scenarios_DA[(t, k_p)]]
-        scenarios_data_Bprices[(t,k)] [price_scenarios_B[(t, k_p)]]
-        scenarios_data_WindProd[(t,k)] [wind_power_scenarios[(t, k_w)]]
+        scenarios_data_Bprices[(t,k)] = [price_scenarios_B[(t, k_p)]]
+        scenarios_data_WindProd[(t,k)] = [wind_power_scenarios[(t, k_w)]]
         #scenarios_data_OS[(t, k)] = [price_scenarios[(t, k_p)], wind_power_scenarios[(t, k_w)]]
 
 
