@@ -18,9 +18,9 @@ class InputData:
             TIME: list,
             generator_cost: float,
             generator_capacity: float,
-            generator_availability: dict[int, dict[int, float] | dict[int, float] | dict[int, float] | dict[int, float] | dict[int, float]],
-            B_price: dict[int, dict[int, float] | dict[int, float] | dict[int, float] | dict[int, float] | dict[int, float]],
-            DA_price: float,
+            generator_availability: dict[tuple[int, int], float],
+            b_price: dict[tuple[int, int], float],
+            da_price: float,
             pi: dict[int, float],
             rho_charge: float,
             rho_discharge: float,
@@ -39,9 +39,9 @@ class InputData:
         # Generators capacity (P^G_i)
         self.generator_capacity = generator_capacity
         # Market clearing price DA(lambda_DA)
-        self.DA_price = DA_price
+        self.da_price = da_price
         # Market clearing price Balancing Market (lambda_B)
-        self.B_price = B_price
+        self.b_price = b_price
         # Scenario probability
         self.pi = pi
         #rho charge
@@ -67,21 +67,22 @@ class StochasticOfferingStrategy():
 
     def _build_variables(self):
         self.variables.generator_production = {
-            (t): self.model.addVar(
-                lb=0, ub=self.data.generator_availability[(t,k)], name=f'DA production_h_{t}'
+            t: self.model.addVar(
+                lb=0, ub=self.data.generator_availability.get((t, k), 0), name=f'DA production_h_{t}'
             )
-            for k in self.data.SCENARIOS for t in self.data.TIME
+            for t in self.data.TIME
+            for k in self.data.SCENARIOS
         }
 
         self.variables.charging_power = {
-            (t): self.model.addVar(
+            t: self.model.addVar(
                 lb=0, ub=self.data.charging_capacity, name=f'Charging power_h_{t}'
             )
-            for k in self.data.SCENARIOS for t in self.data.TIME
+            for t in self.data.TIME
         }
 
         self.variables.discharging_power = {
-            (t): self.model.addVar( #TODO intialize discharging UB
+            t: self.model.addVar( #TODO intialize discharging UB
                 lb=0, ub=self.data.charging_capacity, name=f'Discharging power_h_{t}'
             )
             for t in self.data.TIME
@@ -91,7 +92,8 @@ class StochasticOfferingStrategy():
             (t, k): self.model.addVar(
                 lb=0, ub=GRB.INFINITY, name=f'State of charge_{t}_{k}'
             )
-            for k in self.data.SCENARIOS for t in self.data.TIME
+            for t in self.data.TIME
+            for k in self.data.SCENARIOS
 
         }
 
@@ -99,28 +101,33 @@ class StochasticOfferingStrategy():
             (t, k): self.model.addVar(
                 lb=0, ub=self.data.charging_capacity, name=f'Balancing_discharge_{t}_{k}'
             )
-            for k in self.data.SCENARIOS for t in self.data.TIME
+            for t in self.data.TIME
+            for k in self.data.SCENARIOS
 
         }
 
         self.variables.balancing_charge = {
             (t, k): self.model.addVar(
                 lb=0, ub=self.data.charging_capacity, name=f'Balancing_charge_{t}_{k}'
-            ) for k in self.data.SCENARIOS for t in self.data.TIME
+            )
+            for t in self.data.TIME
+            for k in self.data.SCENARIOS
 
         }
 
         self.variables.balancing_power = {
             (t, k): self.model.addVar(
-                lb=0, ub=self.data.generator_availability[(t,k)]+30, name=f'Balancing power_{t}_{k}'
-            )for k in self.data.SCENARIOS for t in self.data.TIME
+                lb=0, ub=self.data.generator_availability[(t,k)] + 30, name=f'Balancing power_{t}_{k}'
+            )
+            for t in self.data.TIME
+            for k in self.data.SCENARIOS
         }
 
     def _build_constraints(self):
-
         self.constraints.balancing_power = {
-            (t,k): self.model.addLConstr(
-                self.data.generator_availability[(t,k)] - self.variables.generator_production[t] - self.variables.balancing_charge[(t,k)] + self.variables.balancing_discharge[(t,k)],
+            (t, k): self.model.addLConstr(
+                self.data.generator_availability[(t,k)] - self.variables.generator_production[t]
+                - self.variables.balancing_charge[(t,k)] + self.variables.balancing_discharge[(t,k)],
                 GRB.EQUAL,
                 self.variables.balancing_power[(t,k)],
                 name=f'Balancing power constraint_{t}_{k}'
@@ -130,10 +137,21 @@ class StochasticOfferingStrategy():
         }
         self.constraints.DA_power_constraint = {
             (t, k): self.model.addLConstr(
-                self.data.generator_availability[(t,k)] - self.variables.charging_power[(t)] + self.variables.discharging_power[(t)],
+                self.data.generator_availability[(t,k)] - self.variables.charging_power[t] + self.variables.discharging_power[t],
                 GRB.EQUAL,
-                self.variables.generator_production[(t)],
+                self.variables.generator_production[t],
                 name=f'DA power constraint_{t}_{k}'
+            )
+            for t in self.data.TIME
+            for k in self.data.SCENARIOS
+        }
+
+        self.constraints.min_production_constraints = {
+            (t, k): self.model.addLConstr(
+                self.variables.charging_power[(t)] + self.variables.balancing_charge[(t, k)],
+                GRB.GREATER_EQUAL,
+                0,
+                name=f'Min production constraint_{t}_{k}'
             )
             for t in self.data.TIME
             for k in self.data.SCENARIOS
@@ -142,23 +160,12 @@ class StochasticOfferingStrategy():
         self.constraints.max_production_constraints = {
             (t, k): self.model.addLConstr(
                 self.variables.charging_power[(t)] + self.variables.balancing_charge[(t, k)],
-                GRB.GREATER_EQUAL,
-                0,
-                name=f'Min production constraint_{t}_{k}'
-            )
-            for k in self.data.SCENARIOS
-            for t in self.data.TIME
-        }
-
-        self.constraints.max_production_constraints = {
-            (t, k): self.model.addLConstr(
-                self.variables.charging_power[(t)] + self.variables.balancing_charge[(t,k)],
                 GRB.LESS_EQUAL,
                 self.data.generator_availability[(t,k)],
                 name=f'Max production constraint_{t}_{k}'
             )
-            for k in self.data.SCENARIOS
             for t in self.data.TIME
+            for k in self.data.SCENARIOS
         }
 
         self.constraints.SOC_max = {
@@ -168,25 +175,27 @@ class StochasticOfferingStrategy():
                 self.data.soc_max,
                 name=f'Max state of charge constraint_{t}_{k}'
             )
-            for k in self.data.SCENARIOS
             for t in self.data.TIME
+            for k in self.data.SCENARIOS
         }
 
         self.constraints.SOC_time = {
             (t, k): self.model.addLConstr(
-                self.variables.soc[(t-1,k)] + (self.variables.charging_power[(t)] + self.variables.balancing_charge[(t,k)])* self.data.rho_charge - (self.variables.discharging_power[(t)]+self.variables.balancing_discharge[(t,k)]) * (1/self.data.rho_discharge),
+                self.variables.soc[(t-1,k)] + (self.variables.charging_power[t] + self.variables.balancing_charge[(t,k)])* self.data.rho_charge
+                - (self.variables.discharging_power[(t)]+self.variables.balancing_discharge[(t,k)]) * (1/self.data.rho_discharge),
                 GRB.EQUAL,
                 self.variables.soc[(t,k)],
                 name=f'SOC time constraint_{t}_{k}'
             )
-            for k in self.data.SCENARIOS
             for t in self.data.TIME
+            for k in self.data.SCENARIOS
             if t > 1
         }
 
         self.constraints.SOC_init = {
             (k): self.model.addLConstr(
-                self.data.soc_init + (self.variables.charging_power[(1)] + self.variables.balancing_charge[(1,k)]) * self.data.rho_charge - (self.variables.discharging_power[(1)]+self.variables.balancing_discharge[(1,k)]) * (1/self.data.rho_discharge),
+                self.data.soc_init + (self.variables.charging_power[(1)] + self.variables.balancing_charge[(1,k)]) * self.data.rho_charge
+                - (self.variables.discharging_power[(1)] + self.variables.balancing_discharge[(1,k)]) * (1/self.data.rho_discharge),
                 GRB.EQUAL,
                 self.variables.soc[(1,k)],
                 name=f'SOC initial constraint{1}_{k}'
@@ -199,7 +208,8 @@ class StochasticOfferingStrategy():
         objective = (
             gp.quicksum(
                 gp.quicksum(
-                    (self.data.DA_price-self.data.generator_cost)*self.variables.generator_production[t]+ self.data.pi[k]*(self.data.B_price[(t,k)]-self.data.generator_cost)*self.variables.balancing_power[(t,k)]
+                    (self.data.da_price - self.data.generator_cost) * self.variables.generator_production[t]
+                    + self.data.pi[k] * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
                     for t in self.data.TIME
                 )
                 for k in self.data.SCENARIOS
@@ -212,19 +222,28 @@ class StochasticOfferingStrategy():
         self._build_variables()
         self._build_constraints()
         self._build_objective_function()
-        #self.model.update()
+        self.model.update()
 
     #Save results is not changed yet
     def _save_results(self):
         self.results.objective_value = self.model.ObjVal
         self.results.generator_production = [
-            self.variables.generator_production[k][t].x for k in self.data.SCENARIOS for t in self.data.TIME
+            self.variables.generator_production[t].x for t in self.data.TIME
             ]
+        self.results.balancing_power = [
+            self.variables.balancing_power[(t,k)].x for t in self.data.TIME for k in self.data.SCENARIOS
+        ]
         self.results.charging_power = [
-            self.variables.charging_power[k][t].x for k in self.data.SCENARIOS for t in self.data.TIME
+            self.variables.charging_power[(t)].x for t in self.data.TIME
+        ]
+        self.results.balancing_charge = [
+            self.variables.balancing_charge[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
         ]
         self.results.discharging_power = [
-            self.variables.discharging_power[k][t].x for k in self.data.SCENARIOS for t in self.data.TIME
+            self.variables.discharging_power[(t)].x for t in self.data.TIME
+        ]
+        self.results.balancing_discharge = [
+            self.variables.balancing_discharge[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
         ]
 
     def run(self):
@@ -234,8 +253,9 @@ class StochasticOfferingStrategy():
         else:
             self.model.computeIIS()
             self.model.write("model.ilp")
-            #print(f"optimization of {self.model.ModelName} was not successful")
+            print(f"optimization of {self.model.ModelName} was not successful")
             raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
+
 
     def display_results(self):
         print()
@@ -246,31 +266,35 @@ class StochasticOfferingStrategy():
         print(self.results.generator_production)
         print("--------------------------------------------------")
         print("Optimal charing power:")
-        print(self.results.charging_power)
+        print(self.results.balancing_power)
         print("--------------------------------------------------")
         print("Optimal discharging power:")
+        print(self.results.charging_power)
+        print("--------------------------------------------------")
+        print("Optimal generator offer:")
+        print(self.results.balancing_charge)
+        print("--------------------------------------------------")
+        print("Optimal charing power:")
         print(self.results.discharging_power)
         print("--------------------------------------------------")
+        print("Optimal discharging power:")
+        print(self.results.balancing_discharge)
+        print("--------------------------------------------------")
 
-##
 if __name__ == '__main__':
-
-
     testdata = True
     if(testdata):
-        import random
-
         generator_availability_values = {
-            (1, 1): random.uniform(20, 33), (1, 2): random.uniform(20, 33), (1, 3): random.uniform(20, 33),
-            (1, 4): random.uniform(20, 33), (1, 5): random.uniform(20, 33),
-            (2, 1): random.uniform(20, 33), (2, 2): random.uniform(20, 33), (2, 3): random.uniform(20, 33),
-            (2, 4): random.uniform(20, 33), (2, 5): random.uniform(20, 33),
-            (3, 1): random.uniform(20, 33), (3, 2): random.uniform(20, 33), (3, 3): random.uniform(20, 33),
-            (3, 4): random.uniform(20, 33), (3, 5): random.uniform(20, 33),
-            (4, 1): random.uniform(20, 33), (4, 2): random.uniform(20, 33), (4, 3): random.uniform(20, 33),
-            (4, 4): random.uniform(20, 33), (4, 5): random.uniform(20, 33),
-            (5, 1): random.uniform(20, 33), (5, 2): random.uniform(20, 33), (5, 3): random.uniform(20, 33),
-            (5, 4): random.uniform(20, 33), (5, 5): random.uniform(20, 33)
+            (1, 1): 50, (1, 2): 50, (1, 3): 50,
+            (1, 4): 50, (1, 5): 50,
+            (2, 1): 50, (2, 2): 50, (2, 3): 50,
+            (2, 4): 50, (2, 5): 50,
+            (3, 1): 50, (3, 2): 50, (3, 3): 50,
+            (3, 4): 50, (3, 5): 50,
+            (4, 1): 50, (4, 2): 50, (4, 3): 50,
+            (4, 4): 50, (4, 5): 50,
+            (5, 1): 50, (5, 2): 50, (5, 3): 50,
+            (5, 4): 50, (5, 5): 50
         }
 
         price_values = {
@@ -282,15 +306,13 @@ if __name__ == '__main__':
         }
 
         input_data = InputData(
-            #SCENARIOS=[1, 2, 3, 4, 5],
-            #TIME=[1, 2, 3, 4, 5],
-            SCENARIOS=[1, 2],
+            SCENARIOS=[1, 2, 3, 4, 5],
             TIME=[1, 2, 3, 4, 5],
             generator_cost=20,
             generator_capacity= 48,
             generator_availability=generator_availability_values,
-            DA_price= 80,
-            B_price=price_values,
+            da_price= 80,
+            b_price=price_values,
             pi={1: 0.2, 2: 0.2, 3: 0.2, 4: 0.2, 5: 0.2},
             rho_charge=0.9, #TODO what were the rho values before??
             rho_discharge=0.9,
@@ -338,9 +360,8 @@ if __name__ == '__main__':
         # )
 
     model = StochasticOfferingStrategy(input_data)
-
     model.run()
     model.display_results()
-    #model_PI = StochasticOfferingStrategy(input_data)
-    #model_PI.run()
-    #model_PI.display_results()
+    # model_PI = StochasticOfferingStrategy(input_data)
+    # model_PI.run()
+    # model_PI.display_results()
