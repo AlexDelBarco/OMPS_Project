@@ -116,7 +116,7 @@ class StochasticOfferingStrategy():
 
         self.constraints.balancing_power = {
             (t,k): self.model.addLConstr(
-                self.data.generator_capacity[t][k] - self.variables.generator_production[t] - self.variables.balancing_charge[(t,k)] + self.variables.balancing_discharge[(t,k)],
+                self.data.generator_capacity[(t,k)] - self.variables.generator_production[t] - self.variables.balancing_charge[(t,k)] + self.variables.balancing_discharge[(t,k)],
                 GRB.EQUAL,
                 self.variables.balancing_power[(t,k)]
             )
@@ -125,7 +125,7 @@ class StochasticOfferingStrategy():
         }
         self.constraints.total_power_constraint = {
             (t, k): self.model.addLConstr(
-                self.data.generator_capacity[t][k] - self.variables.charging_power[(t)] + self.variables.discharging_power[(t)],
+                self.data.generator_capacity[(t,k)] - self.variables.charging_power[(t)] + self.variables.discharging_power[(t)],
                 GRB.EQUAL,
                 self.variables.generator_production[(t)],
                 name=f'Max production constraint_{t}_{k}'
@@ -138,7 +138,7 @@ class StochasticOfferingStrategy():
             (t, k): self.model.addLConstr(
                 self.variables.charging_power[(t)] + self.variables.balancing_charge[(t,k)],
                 GRB.LESS_EQUAL,
-                self.data.generator_capacity[t][k],
+                self.data.generator_capacity[(t,k)],
                 name=f'Max production constraint_{t}_{k}'
             )
             for k in self.data.SCENARIOS
@@ -184,7 +184,7 @@ class StochasticOfferingStrategy():
         objective = (
             gp.quicksum(
                 gp.quicksum(
-                    (self.data.DA_price-self.data.generator_cost)*self.variables.generator_production[t]+ self.data.pi[k]*(self.data.B_price[t][k]-self.data.generator_cost)*self.variables.balancing_power[(t,k)]
+                    (self.data.DA_price-self.data.generator_cost)*self.variables.generator_production[t]+ self.data.pi[k]*(self.data.B_price[(t,k)]-self.data.generator_cost)*self.variables.balancing_power[(t,k)]
                         for k in self.data.SCENARIOS
                 )
                 for t in self.data.TIME
@@ -217,7 +217,7 @@ class StochasticOfferingStrategy():
         if self.model.status == GRB.OPTIMAL:
             self._save_results()
         else:
-            raise RuntimeError(f"optimization of {model.ModelName} was not successful")
+            raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
 
     def display_results(self):
         print()
@@ -234,29 +234,27 @@ class StochasticOfferingStrategy():
         print(self.results.discharging_power)
         print("--------------------------------------------------")
 
+##
 if __name__ == '__main__':
 
 
-
-    testdata = False
+    testdata = True
     if(testdata):
-
         generator_capacity_values = {
-            (1, 1): [88.31], (1, 2): [136.25], (1, 3): [85.61], (1, 4): [137.09], (1, 5): [146.05],
-            (2, 1): [134.67], (2, 2): [96.76], (2, 3): [139.7], (2, 4): [96.58], (2, 5): [117.66],
-            (3, 1): [112.06], (3, 2): [86.55], (3, 3): [79.03], (3, 4): [115.01], (3, 5): [115.76],
-            (4, 1): [85.12], (4, 2): [122.11], (4, 3): [83.61], (4, 4): [80.92], (4, 5): [90.75],
-            (5, 1): [111.76], (5, 2): [141.14], (5, 3): [135.55], (5, 4): [75.47], (5, 5): [118.62]
+            (1, 1): 88.31, (1, 2): 136.25, (1, 3): 85.61, (1, 4): 137.09, (1, 5): 146.05,
+            (2, 1): 134.67, (2, 2): 96.76, (2, 3): 139.7, (2, 4): 96.58, (2, 5): 117.66,
+            (3, 1): 112.06, (3, 2): 86.55, (3, 3): 79.03, (3, 4): 115.01, (3, 5): 115.76,
+            (4, 1): 85.12, (4, 2): 122.11, (4, 3): 83.61, (4, 4): 80.92, (4, 5): 90.75,
+            (5, 1): 111.76, (5, 2): 141.14, (5, 3): 135.55, (5, 4): 75.47, (5, 5): 118.62
         }
 
         price_values = {
-            (1, 1): [88.31], (1, 2): [136.25], (1, 3): [85.61], (1, 4): [137.09], (1, 5): [146.05],
-            (2, 1): [134.67], (2, 2): [96.76], (2, 3): [139.7], (2, 4): [96.58], (2, 5): [117.66],
-            (3, 1): [112.06], (3, 2): [86.55], (3, 3): [79.03], (3, 4): [115.01], (3, 5): [115.76],
-            (4, 1): [85.12], (4, 2): [122.11], (4, 3): [83.61], (4, 4): [80.92], (4, 5): [90.75],
-            (5, 1): [111.76], (5, 2): [141.14], (5, 3): [135.55], (5, 4): [75.47], (5, 5): [118.62]
+            (1, 1): 88.31, (1, 2): 136.25, (1, 3): 85.61, (1, 4): 137.09, (1, 5): 146.05,
+            (2, 1): 134.67, (2, 2): 96.76, (2, 3): 139.7, (2, 4): 96.58, (2, 5): 117.66,
+            (3, 1): 112.06, (3, 2): 86.55, (3, 3): 79.03, (3, 4): 115.01, (3, 5): 115.76,
+            (4, 1): 85.12, (4, 2): 122.11, (4, 3): 83.61, (4, 4): 80.92, (4, 5): 90.75,
+            (5, 1): 111.76, (5, 2): 141.14, (5, 3): 135.55, (5, 4): 75.47, (5, 5): 118.62
         }
-
 
         input_data = InputData(
             SCENARIOS=[1, 2, 3, 4, 5],
@@ -271,44 +269,44 @@ if __name__ == '__main__':
             soc_max = 500,
             soc_init=50
         )
-    else:
-        scenario_data = scenario_gen.createScenarios()
-
-        max_i = max(key[0] for key in scenario_data.keys())
-        max_j = max(key[1] for key in scenario_data.keys())
-        scenarios = [j for j in range(1, max_j+1)]
-        time = [i for i in range(1, max_i+1)]
-
-        #Equal probability of each scenario 1/100
-        pi = {k: 1/max_j for k in scenarios}
-
-        price_values = {}
-        generator_capacity_values = {}
-
-        #differentiating the scenario data in tow seperate collections price_values and generator_capacity
-        for (t, k), values in scenario_data.items():
-            if t not in price_values:
-                price_values[t] = {}
-            if t not in generator_capacity_values:
-                generator_capacity_values[t] = {}
-
-            price_values[t][k] = values[0]
-            generator_capacity_values[t][k] = values[1]
-
-
-        input_data = InputData(
-            SCENARIOS=scenarios,
-            TIME=time,
-            generator_cost=15,
-            generator_capacity=generator_capacity_values,
-            DA_price=10,
-            B_price=price_values,
-            pi=pi,
-            rho_charge=1.5,
-            rho_discharge=1.5,
-            soc_max=500,
-            soc_init=50
-        )
+    #else:
+        # scenario_data = scenario_gen.createScenarios()
+        #
+        # max_i = max(key[0] for key in scenario_data.keys())
+        # max_j = max(key[1] for key in scenario_data.keys())
+        # scenarios = [j for j in range(1, max_j+1)]
+        # time = [i for i in range(1, max_i+1)]
+        #
+        # #Equal probability of each scenario 1/100
+        # pi = {k: 1/max_j for k in scenarios}
+        #
+        # price_values = {}
+        # generator_capacity_values = {}
+        #
+        # #differentiating the scenario data in tow seperate collections price_values and generator_capacity
+        # for (t, k), values in scenario_data.items():
+        #     if t not in price_values:
+        #         price_values[t] = {}
+        #     if t not in generator_capacity_values:
+        #         generator_capacity_values[t] = {}
+        #
+        #     price_values[t][k] = values[0]
+        #     generator_capacity_values[t][k] = values[1]
+        #
+        #
+        # input_data = InputData(
+        #     SCENARIOS=scenarios,
+        #     TIME=time,
+        #     generator_cost=15,
+        #     generator_capacity=generator_capacity_values,
+        #     DA_price=10,
+        #     B_price=price_values,
+        #     pi=pi,
+        #     rho_charge=1.5,
+        #     rho_discharge=1.5,
+        #     soc_max=500,
+        #     soc_init=50
+        # )
 
     model = StochasticOfferingStrategy(input_data)
 

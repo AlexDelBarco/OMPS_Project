@@ -118,9 +118,10 @@ for t in range(1, 25):
     for k in range(1, num_scenarios_total + 1):
         k_p = SCENARIOS_PRICE[((k - 1) // num_scenarios_wind) % num_price_scenarios]
         k_w = SCENARIOS_WIND[(k - 1) % num_scenarios_wind]
-        scenarios_data_DAprices[(t,k)] = [price_scenarios_DA[(t, k_p)]]
-        scenarios_data_Bprices[(t,k)] = [price_scenarios_B[(t, k_p)]]
-        scenarios_data_WindProd[(t,k)] = [wind_power_scenarios[(t, k_w)]]
+        #TODO make sure this isn't a list element!
+        scenarios_data_DAprices[(t,k)] = price_scenarios_DA[(t, k_p)]
+        scenarios_data_Bprices[(t,k)] = price_scenarios_B[(t, k_p)]
+        scenarios_data_WindProd[(t,k)] = wind_power_scenarios[(t, k_w)]
         #scenarios_data_OS[(t, k)] = [price_scenarios[(t, k_p)], wind_power_scenarios[(t, k_w)]]
 
 
