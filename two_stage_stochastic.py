@@ -1,6 +1,6 @@
 import gurobipy as gp
 from gurobipy import GRB
-import scenario_generation_function as scenario_gen
+from scenario_generation_function import generate_scenarios
 
 
 class Expando(object):
@@ -20,7 +20,7 @@ class InputData:
             generator_capacity: float,
             generator_availability: dict[tuple[int, int], float],
             b_price: dict[tuple[int, int], float],
-            da_price: float,
+            da_price: dict[tuple[int, int], float],
             pi: dict[int, float],
             rho_charge: float,
             rho_discharge: float,
@@ -73,6 +73,12 @@ class StochasticOfferingStrategy():
             for t in self.data.TIME
             for k in self.data.SCENARIOS
         }
+        # self.variables.generator_production = {
+        #     (t): self.model.addVar(
+        #         lb=0, ub=self.data.generator_availability[(t, k)], name=f'DA production_h_{t}'
+        #     )
+        #     for k in self.data.SCENARIOS for t in self.data.TIME
+        # }
 
         self.variables.charging_power = {
             t: self.model.addVar(
@@ -208,8 +214,8 @@ class StochasticOfferingStrategy():
         objective = (
             gp.quicksum(
                 gp.quicksum(
-                    (self.data.da_price - self.data.generator_cost) * self.variables.generator_production[t]
-                    + self.data.pi[k] * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
+                    (self.data.da_price[(t, k)] - self.data.generator_cost) * self.variables.generator_production[t]
+                    + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
                     for t in self.data.TIME
                 )
                 for k in self.data.SCENARIOS
@@ -282,27 +288,35 @@ class StochasticOfferingStrategy():
         print("--------------------------------------------------")
 
 if __name__ == '__main__':
-    testdata = True
+    testdata = False
     if(testdata):
         generator_availability_values = {
-            (1, 1): 50, (1, 2): 50, (1, 3): 50,
+            (1, 1): 43, (1, 2): 50, (1, 3): 50,
             (1, 4): 50, (1, 5): 50,
             (2, 1): 50, (2, 2): 50, (2, 3): 50,
-            (2, 4): 50, (2, 5): 50,
+            (2, 4): 33, (2, 5): 50,
             (3, 1): 50, (3, 2): 50, (3, 3): 50,
-            (3, 4): 50, (3, 5): 50,
+            (3, 4): 50, (3, 5): 27,
             (4, 1): 50, (4, 2): 50, (4, 3): 50,
             (4, 4): 50, (4, 5): 50,
-            (5, 1): 50, (5, 2): 50, (5, 3): 50,
+            (5, 1): 48, (5, 2): 50, (5, 3): 50,
             (5, 4): 50, (5, 5): 50
         }
 
-        price_values = {
+        b_price = {
             (1, 1): 88.31, (1, 2): 136.25, (1, 3): 85.61, (1, 4): 137.09, (1, 5): 146.05,
             (2, 1): 134.67, (2, 2): 96.76, (2, 3): 139.7, (2, 4): 96.58, (2, 5): 117.66,
             (3, 1): 112.06, (3, 2): 86.55, (3, 3): 79.03, (3, 4): 115.01, (3, 5): 115.76,
             (4, 1): 85.12, (4, 2): 122.11, (4, 3): 83.61, (4, 4): 80.92, (4, 5): 90.75,
             (5, 1): 111.76, (5, 2): 141.14, (5, 3): 135.55, (5, 4): 75.47, (5, 5): 118.62
+        }
+
+        da_price = {
+            (1, 1): 51.49, (1, 2): 48.39, (1, 3): 48.92, (1, 4): 49.45, (1, 5): 42.72,
+            (2, 1): 50.84, (2, 2): 82.15, (2, 3): 100.96, (2, 4): 116.60, (2, 5): 112.20,
+            (3, 1): 108.54, (3, 2): 111.61, (3, 3): 114.02, (3, 4): 127.40, (3, 5): 134.02,
+            (4, 1): 142.18, (4, 2): 147.42, (4, 3): 155.91, (4, 4): 154.10, (4, 5): 148.30,
+            (5, 1): 138.59, (5, 2): 129.44, (5, 3): 122.89, (5, 4): 112.47, (5, 5): 112.47
         }
 
         input_data = InputData(
@@ -311,53 +325,45 @@ if __name__ == '__main__':
             generator_cost=20,
             generator_capacity= 48,
             generator_availability=generator_availability_values,
-            da_price= 80,
-            b_price=price_values,
-            pi={1: 0.2, 2: 0.2, 3: 0.2, 4: 0.2, 5: 0.2},
+            da_price= da_price,
+            b_price=b_price,
+            pi=0.2,
             rho_charge=0.9, #TODO what were the rho values before??
             rho_discharge=0.9,
             soc_max = 120,
             soc_init=10,
             charging_capacity= 40
         )
-    #else:
-        # scenario_data = scenario_gen.createScenarios()
-        #
-        # max_i = max(key[0] for key in scenario_data.keys())
-        # max_j = max(key[1] for key in scenario_data.keys())
-        # scenarios = [j for j in range(1, max_j+1)]
-        # time = [i for i in range(1, max_i+1)]
-        #
-        # #Equal probability of each scenario 1/100
-        # pi = {k: 1/max_j for k in scenarios}
-        #
-        # price_values = {}
-        # generator_availability_values = {}
-        #
-        # #differentiating the scenario data in tow seperate collections price_values and generator_availability
-        # for (t, k), values in scenario_data.items():
-        #     if t not in price_values:
-        #         price_values[t] = {}
-        #     if t not in generator_availability_values:
-        #         generator_availability_values[t] = {}
-        #
-        #     price_values[t][k] = values[0]
-        #     generator_availability_values[t][k] = values[1]
-        #
-        #
-        # input_data = InputData(
-        #     SCENARIOS=scenarios,
-        #     TIME=time,
-        #     generator_cost=15,
-        #     generator_availability=generator_availability_values,
-        #     DA_price=10,
-        #     B_price=price_values,
-        #     pi=pi,
-        #     rho_charge=1.5,
-        #     rho_discharge=1.5,
-        #     soc_max=500,
-        #     soc_init=50
-        # )
+    else:
+        num_wind_scenarios = 10
+        num_price_scenarios = 10
+        SCENARIOS = num_wind_scenarios * num_price_scenarios
+        Scenarios = [i for i in range(1, SCENARIOS + 1)]
+        Time = [i for i in range(1, 25)]
+
+        scescenario_DA_prices = {}
+        scenario_B_prices = {}
+        scenario_windProd = {}
+        scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
+
+        #Equal probability of each scenario 1/100
+        pi = 1/SCENARIOS
+
+        input_data = InputData(
+            SCENARIOS=Scenarios,
+            TIME=Time,
+            generator_cost=20,
+            generator_capacity=48,
+            generator_availability=scenario_windProd,
+            da_price=scenario_DA_prices,
+            b_price=scenario_B_prices,
+            pi=pi,
+            rho_charge=0.9,  # TODO what were the rho values before??
+            rho_discharge=0.9,
+            soc_max=120,
+            soc_init=10,
+            charging_capacity=40
+        )
 
     model = StochasticOfferingStrategy(input_data)
     model.run()

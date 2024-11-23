@@ -17,7 +17,7 @@ def generate_scenarios(num_price_scenarios, num_wind_scenarios):
     ]
 
     SCENARIOS_PRICE = [f'P{k}' for k in range(1, num_price_scenarios + 1)]
-    SCENARIOS_WIND = [f'V{k}' for k in range(1, num_wind_scenarios + 1)]
+    SCENARIOS_WIND = [f'"V{k}"' for k in range(1, num_wind_scenarios + 1)]
 
     num_scenarios_total = num_price_scenarios * num_wind_scenarios
 
@@ -66,8 +66,11 @@ def generate_scenarios(num_price_scenarios, num_wind_scenarios):
         for k in range(1, num_scenarios_total + 1):
             k_p = SCENARIOS_PRICE[((k - 1) // num_wind_scenarios) % num_price_scenarios]
             k_w = SCENARIOS_WIND[(k - 1) % num_wind_scenarios]
-            scenarios_data_DAprices[(t, k)] = [price_scenarios_DA[(t, k_p)]]
-            scenarios_data_Bprices[(t, k)] = [price_scenarios_B[(t, k_p)]]
-            scenarios_data_WindProd[(t, k)] = [wind_power_scenarios[(t, k_w)]]
+            scenarios_data_DAprices[(t, k)] = price_scenarios_DA[(t, k_p)]
+            scenarios_data_Bprices[(t, k)] = price_scenarios_B[(t, k_p)]
+            scenarios_data_WindProd[(t, k)] = wind_power_scenarios[(t, k_w)]
 
     return scenarios_data_DAprices, scenarios_data_Bprices, scenarios_data_WindProd
+
+
+scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(10, 10)
