@@ -73,12 +73,6 @@ class StochasticOfferingStrategy():
             for t in self.data.TIME
             for k in self.data.SCENARIOS
         }
-        # self.variables.generator_production = {
-        #     (t): self.model.addVar(
-        #         lb=0, ub=self.data.generator_availability[(t, k)], name=f'DA production_h_{t}'
-        #     )
-        #     for k in self.data.SCENARIOS for t in self.data.TIME
-        # }
 
         self.variables.charging_power = {
             t: self.model.addVar(
@@ -88,7 +82,7 @@ class StochasticOfferingStrategy():
         }
 
         self.variables.discharging_power = {
-            t: self.model.addVar( #TODO intialize discharging UB
+            t: self.model.addVar(
                 lb=0, ub=self.data.charging_capacity, name=f'Discharging power_h_{t}'
             )
             for t in self.data.TIME
@@ -123,7 +117,7 @@ class StochasticOfferingStrategy():
 
         self.variables.balancing_power = {
             (t, k): self.model.addVar(
-                lb=0, ub=self.data.generator_availability[(t,k)] + 30, name=f'Balancing power_{t}_{k}'
+                lb=0, ub=self.data.generator_availability[(t,k)], name=f'Balancing power_{t}_{k}'
             )
             for t in self.data.TIME
             for k in self.data.SCENARIOS
@@ -260,6 +254,10 @@ class StochasticOfferingStrategy():
             self.model.computeIIS()
             self.model.write("model.ilp")
             print(f"optimization of {self.model.ModelName} was not successful")
+            for v in self.model.getVars():
+                print(f"Variable {v.varName}: LB={v.lb}, UB={v.ub}")
+            for c in self.model.getConstrs():
+                print(f"Constraint {c.ConstrName}: Slack={c.slack}")
             raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
 
 
@@ -288,18 +286,18 @@ class StochasticOfferingStrategy():
         print("--------------------------------------------------")
 
 if __name__ == '__main__':
-    testdata = False
+    testdata = True
     if(testdata):
         generator_availability_values = {
-            (1, 1): 43, (1, 2): 50, (1, 3): 50,
+            (1, 1): 53, (1, 2): 50, (1, 3): 50,
             (1, 4): 50, (1, 5): 50,
             (2, 1): 50, (2, 2): 50, (2, 3): 50,
-            (2, 4): 33, (2, 5): 50,
-            (3, 1): 50, (3, 2): 50, (3, 3): 50,
-            (3, 4): 50, (3, 5): 27,
-            (4, 1): 50, (4, 2): 50, (4, 3): 50,
+            (2, 4): 63, (2, 5): 50,
+            (3, 1): 70, (3, 2): 50, (3, 3): 50,
+            (3, 4): 50, (3, 5): 80,
+            (4, 1): 60, (4, 2): 50, (4, 3): 50,
             (4, 4): 50, (4, 5): 50,
-            (5, 1): 48, (5, 2): 50, (5, 3): 50,
+            (5, 1): 88, (5, 2): 50, (5, 3): 50,
             (5, 4): 50, (5, 5): 50
         }
 
@@ -362,7 +360,7 @@ if __name__ == '__main__':
             rho_discharge=0.9,
             soc_max=120,
             soc_init=10,
-            charging_capacity=40
+            charging_capacity=100
         )
 
     model = StochasticOfferingStrategy(input_data)
