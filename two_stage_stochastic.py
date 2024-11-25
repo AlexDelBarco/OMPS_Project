@@ -1,5 +1,7 @@
 import gurobipy as gp
 from gurobipy import GRB
+from sympy import false
+
 from scenario_generation_function import generate_scenarios
 import matplotlib.pyplot as plt
 
@@ -59,8 +61,11 @@ class InputData:
 
 class StochasticOfferingStrategy():
 
-    def __init__(self, input_data: InputData):
+    def __init__(self, input_data: InputData, risk_averse: bool = False, alpha: float = 1.0, beta: float = 0):
         self.data = input_data
+        self.risk_averse = risk_averse
+        self.alpha = alpha
+        self.beta = beta
         self.variables = Expando()
         self.constraints = Expando()
         self.results = Expando()
@@ -122,6 +127,20 @@ class StochasticOfferingStrategy():
             for t in self.data.TIME
             for k in self.data.SCENARIOS
         }
+
+        if self.risk_averse:
+            self.variables.zeta = {
+                t : self.model.addVar(lb=-GRB.INFINITY, ub=GRB.INFINITY, name=f'zeta_{t}')
+                for t in self.data.TIME
+            }
+
+            self.variables.eta = {
+                (t, k) : self.model.addVar(
+                    self.model.addVar(lb=0, name=f'eta_{t}_{k}')
+                )
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
+            }
 
     def _build_constraints(self):
         # self.constraints.balancing_power = {
@@ -203,19 +222,50 @@ class StochasticOfferingStrategy():
             for k in self.data.SCENARIOS
         }
 
+        if self.risk_averse:
+            self.constraints.eta_constraint = {
+                (t,k):self.model.addLConstr(
+                    self.variables.zeta[(t)]-self.variables.eta[(t,k)]
+                    -((self.data.da_price[(t-1)]-self.data.generator_cost)*self.variables.generator_production[t]
+                    +(self.variables.b_price[(t, k)] - self.data.generator_cost)*self.variables.balancing_power[(t,k)])
+                    ,GRB.LESS_EQUAL
+                    ,0
+                )
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
+            }
+
+
 
     def _build_objective_function(self):
-        objective = (
-            gp.quicksum(
+
+        if self.risk_averse:
+
+            objective = (
                 gp.quicksum(
-                    (self.data.da_price[(t-1)] - self.data.generator_cost) * self.variables.generator_production[t]
-                    + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
-                    for t in self.data.TIME
+                    gp.quicksum(
+                        (1-self.beta)*((self.data.da_price[(t - 1)] - self.data.generator_cost) * self.variables.generator_production[t]
+                        + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)])
+                        + self.beta*(self.variables.zeta[(t)]-((1/(1-self.alpha))*self.data.pi[k]*self.variables.eta[(t, k)]))
+                        for t in self.data.TIME
+                    )
+                    for k in self.data.SCENARIOS
                 )
-                for k in self.data.SCENARIOS
             )
-        )
-        self.model.setObjective(objective, GRB.MAXIMIZE)
+            self.model.setObjective(objective, GRB.MAXIMIZE)
+
+        else:
+            objective = (
+                gp.quicksum(
+                    gp.quicksum(
+                        (self.data.da_price[(t-1)] - self.data.generator_cost) * self.variables.generator_production[t]
+                        + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
+                        for t in self.data.TIME
+                    )
+                    for k in self.data.SCENARIOS
+                )
+            )
+            self.model.setObjective(objective, GRB.MAXIMIZE)
 
     def _build_model(self):
         self.model = gp.Model(name='Two-stage stochastic offering strategy')
