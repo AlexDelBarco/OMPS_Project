@@ -1,6 +1,7 @@
 import gurobipy as gp
 from gurobipy import GRB
 from scenario_generation_function import generate_scenarios
+import matplotlib.pyplot as plt
 
 
 class Expando(object):
@@ -233,6 +234,9 @@ class StochasticOfferingStrategy():
         self.results.balancing_discharge = {
             (t, k): self.variables.balancing_discharge[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
         }
+        self.results.soc = {
+            (t, k): self.variables.soc[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
+        }
 
     def run(self):
         self.model.optimize()
@@ -288,8 +292,56 @@ class StochasticOfferingStrategy():
             print()
         print("--------------------------------------------------")
 
+    def plot_results(self):
+        """
+        Plots the SOC and other results such as charging/discharging power, DA bid, and balancing power.
+        """
+        time = self.data.TIME
+        scenarios = self.data.SCENARIOS
+
+        # Extract SOC
+        soc = {t: sum(self.results.soc[(t, k)] for k in scenarios) / len(scenarios) for t in time}
+
+        # Extract charging and discharging power
+        charging_power = {t: self.results.charging_power[t-1] for t in time}
+        discharging_power = {t: self.results.discharging_power[t-1] for t in time}
+
+        # Extract Day-Ahead bid
+        da_bid = {t: self.results.generator_production[t-1] for t in time}
+
+        # Extract balancing bid (averaged over scenarios)
+        #balancing_bid = {t: sum(self.results.balancing_power[(t, k)] for k in scenarios) / len(scenarios) for t in time}
+        balancing_bid = {(t,k): self.results.balancing_power[(t, k)] for t in time for k in scenarios}
+
+        # Plot SOC
+        plt.figure(figsize=(10, 6))
+        plt.plot(time, [soc[t] for t in time], label="State of Charge (SOC)", color="blue", marker="o")
+        plt.xlabel("Time (t)")
+        plt.ylabel("SOC")
+        plt.title("State of Charge Over Time")
+        plt.grid(True)
+        plt.legend()
+        plt.show()
+
+        # inspected scenario
+        scenario = 1
+        # Plot DA bid, charging, discharging, and balancing bid
+        plt.figure(figsize=(10, 6))
+        plt.plot(time, [da_bid[t] for t in time], label="DA Bid", color="green", marker="o")
+        plt.plot(time, [charging_power[t] for t in time], label="Charging Power", color="orange", linestyle="--")
+        plt.plot(time, [discharging_power[t] for t in time], label="Discharging Power", color="red", linestyle="--")
+        plt.plot(time, [balancing_bid[t,scenario] for t in time], label=f"Balancing Bid for S{scenario}", color="purple", marker="x")
+        plt.xlabel("Time (t)")
+        plt.ylabel("Power (MW)")
+        plt.title("Day-Ahead, Charging/Discharging, and Balancing Power")
+        plt.grid(True)
+        plt.legend()
+        plt.show()
+
+
+
 if __name__ == '__main__':
-    testdata = False
+    testdata = True
     if(testdata):
         generator_availability_values = {
             (1, 1): 53, (1, 2): 50, (1, 3): 50,
@@ -376,6 +428,9 @@ if __name__ == '__main__':
     model = StochasticOfferingStrategy(input_data)
     model.run()
     model.display_results()
+    model.plot_results()
+
+
     # model_PI = StochasticOfferingStrategy(input_data)
     # model_PI.run()
     # model_PI.display_results()
