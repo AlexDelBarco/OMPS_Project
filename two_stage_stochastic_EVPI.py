@@ -1,7 +1,5 @@
 import gurobipy as gp
 from gurobipy import GRB
-from sympy import false
-
 from scenario_generation_function import generate_scenarios
 import matplotlib.pyplot as plt
 
@@ -29,8 +27,7 @@ class InputData:
             rho_discharge: float,
             soc_max: float,
             soc_init: float,
-            charging_capacity: float,
-            perfect_information = False
+            charging_capacity: float
     ):
         # List of scenarios
         self.SCENARIOS = SCENARIOS
@@ -58,16 +55,13 @@ class InputData:
         self.soc_init = soc_init
         # power output of battery
         self.charging_capacity = charging_capacity
-        self.perfect_information = perfect_information
+
 
 class StochasticOfferingStrategy():
 
-    def __init__(self, input_data: InputData, risk_averse: bool = False, alpha: float = 1.0, beta: float = 0):
+    def __init__(self, input_data: InputData, perfect_information: bool = False):
         self.data = input_data
-        self.risk_averse = risk_averse
-        self.alpha = alpha
-        self.beta = beta
-        self.perfect_information = input_data.perfect_information
+        self.perfect_information = perfect_information
         self.variables = Expando()
         self.constraints = Expando()
         self.results = Expando()
@@ -77,7 +71,7 @@ class StochasticOfferingStrategy():
         if self.perfect_information:
             self.variables.generator_production = {
                 (t,k): self.model.addVar(
-                    lb=0, ub=self.data.generator_capacity, name=f'DA production_h_{t}_{k}'
+                    lb=0, ub=self.data.generator_capacity, name=f'DA production_h_{t}'
                 )
                 for t in self.data.TIME
                 for k in self.data.SCENARIOS
@@ -89,6 +83,7 @@ class StochasticOfferingStrategy():
                 )
                 for t in self.data.TIME
             }
+
 
         self.variables.soc = {
             (t, k): self.model.addVar(
@@ -125,27 +120,14 @@ class StochasticOfferingStrategy():
             for k in self.data.SCENARIOS
         }
 
-        if self.risk_averse:
-            self.variables.zeta = {
-                t : self.model.addVar(lb=-GRB.INFINITY, ub=GRB.INFINITY, name=f'zeta_{t}')
-                for t in self.data.TIME
-            }
-
-            self.variables.eta = {
-                (t, k) : self.model.addVar(
-                    self.model.addVar(lb=0, name=f'eta_{t}_{k}')
-                )
-                for t in self.data.TIME
-                for k in self.data.SCENARIOS
-            }
-
     def _build_constraints(self):
+
         if self.perfect_information:
             self.constraints.balancing_constraint = {
                 (t, k): self.model.addLConstr(
                     self.data.generator_availability[(t, k)] + self.variables.balancing_discharge[(t, k)],
                     GRB.EQUAL,
-                    self.variables.generator_production[(t,k)] + self.variables.balancing_power[(t, k)] +
+                    self.variables.generator_production[(t, k)] + self.variables.balancing_power[(t, k)] +
                     self.variables.balancing_charge[(t, k)],
                     name=f'Balancing power constraint_{t}_{k}'
                 )
@@ -199,38 +181,19 @@ class StochasticOfferingStrategy():
             for k in self.data.SCENARIOS
         }
 
-        if self.risk_averse:
-            self.constraints.eta_constraint = {
-                (t,k):self.model.addLConstr(
-                    self.variables.zeta[(t)]-self.variables.eta[(t,k)]
-                    -((self.data.da_price[(t-1)]-self.data.generator_cost)*self.variables.generator_production[t]
-                    +(self.variables.b_price[(t, k)] - self.data.generator_cost)*self.variables.balancing_power[(t,k)])
-                    ,GRB.LESS_EQUAL
-                    ,0
-                )
-                for t in self.data.TIME
-                for k in self.data.SCENARIOS
-            }
-
-
 
     def _build_objective_function(self):
-
-        if self.risk_averse:
-
+        if self.perfect_information:
             objective = (
                 gp.quicksum(
                     gp.quicksum(
-                        (1-self.beta)*((self.data.da_price[(t - 1)] - self.data.generator_cost) * self.variables.generator_production[t]
-                        + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)])
-                        + self.beta*(self.variables.zeta[(t)]-((1/(1-self.alpha))*self.data.pi[k]*self.variables.eta[(t, k)]))
+                        (self.data.da_price[(t-1)] - self.data.generator_cost) * self.variables.generator_production[(t, k)]
+                        + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
                         for t in self.data.TIME
                     )
                     for k in self.data.SCENARIOS
                 )
             )
-            self.model.setObjective(objective, GRB.MAXIMIZE)
-
         else:
             objective = (
                 gp.quicksum(
@@ -242,7 +205,7 @@ class StochasticOfferingStrategy():
                     for k in self.data.SCENARIOS
                 )
             )
-            self.model.setObjective(objective, GRB.MAXIMIZE)
+        self.model.setObjective(objective, GRB.MAXIMIZE)
 
     def _build_model(self):
         self.model = gp.Model(name='Two-stage stochastic offering strategy')
@@ -254,9 +217,14 @@ class StochasticOfferingStrategy():
     #Save results is not changed yet
     def _save_results(self):
         self.results.objective_value = self.model.ObjVal
-        self.results.generator_production = [
-            self.variables.generator_production[t].x for t in self.data.TIME
-            ]
+        if self.perfect_information:
+            self.results.generator_production = {
+                (t, k): self.variables.generator_production[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
+            }
+        else:
+            self.results.generator_production = {
+                t: self.variables.generator_production[t].x for t in self.data.TIME
+            }
         self.results.balancing_power = {
             (t, k): self.variables.balancing_power[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
         }
@@ -291,7 +259,14 @@ class StochasticOfferingStrategy():
         print("Expected day-ahead profit:")
         print(self.results.objective_value)
         print("Optimal generator offer:")
-        print(self.results.generator_production)
+        if self.perfect_information:
+            for k in self.data.SCENARIOS:
+                print(f"Scenario {k}: ", end="")
+                for t in self.data.TIME:
+                    print(round(self.results.generator_production[(t, k)],1), end=", ")
+                print()
+        else:
+            print(self.results.generator_production)
         print("--------------------------------------------------")
         print("Optimal balancing offer:")
         #print(self.results.balancing_charge)
@@ -330,7 +305,7 @@ class StochasticOfferingStrategy():
 
         # DA STAGE
         # Extract charging and discharging power
-        da_bid = {t: self.results.generator_production[t-1] for t in time}
+        da_bid = {t: self.results.generator_production[t] for t in time}
         da_price = {t: self.data.da_price[t-1] for t in time}
 
         # Extract balancing bid (averaged over scenarios)
@@ -383,7 +358,85 @@ class StochasticOfferingStrategy():
 
         plt.show()
 
+def calculate_evpi(model: StochasticOfferingStrategy, model_PI: StochasticOfferingStrategy):
+    print()
+    print('Objective Values:')
+    print(f"Non perfect Info: {model.results.objective_value}")
+    print(f"Perfect Info: {model_PI.results.objective_value}")
+    print("Expected value of perfect information (EVPI):")
+    print(model_PI.results.objective_value - model.results.objective_value)
 
+def run_optimization_for_different_scenarios(max_scenarios):
+    """
+    Runs the optimization for a range of scenarios from 1 to max_scenarios
+    and plots the profit and EVPI for each case.
+    """
+    profits_non_perfect = []
+    profits_perfect = []
+    evpi_values = []
+    num_scenarios_list = []
+
+    for n in range(1, max_scenarios + 1):
+        # Update the number of scenarios for wind and price
+        num_wind_scenarios = n
+        num_price_scenarios = n
+        SCENARIOS = num_wind_scenarios * num_price_scenarios
+        Scenarios = [i for i in range(1, SCENARIOS + 1)]
+        Time = [i for i in range(1, 25)]  # Assuming 24-hour horizon
+
+        # Generate scenario data
+        scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
+        scenario_DA_prices = [
+            51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
+            112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
+            155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
+        ]  # Reuse the same prices for simplicity
+
+        # Equal probability of each scenario
+        pi = 1 / SCENARIOS
+
+        # Update input data
+        input_data = InputData(
+            SCENARIOS=Scenarios,
+            TIME=Time,
+            generator_cost=20,
+            generator_capacity=48,
+            generator_availability=scenario_windProd,
+            da_price=scenario_DA_prices,
+            b_price=scenario_B_prices,
+            pi=pi,
+            rho_charge=0.9,
+            rho_discharge=0.9,
+            soc_max=120,
+            soc_init=10,
+            charging_capacity=100
+        )
+
+        # Run the model for non-perfect and perfect information
+        model = StochasticOfferingStrategy(input_data)
+        model.run()
+        model_PI = StochasticOfferingStrategy(input_data, perfect_information=True)
+        model_PI.run()
+
+        # Store results
+        profits_non_perfect.append(model.results.objective_value)
+        profits_perfect.append(model_PI.results.objective_value)
+        evpi_values.append(model_PI.results.objective_value - model.results.objective_value)
+        num_scenarios_list.append(SCENARIOS)
+
+    # Plot the results
+    plt.figure(figsize=(12, 6))
+    plt.plot(num_scenarios_list, profits_non_perfect, label="Non-Perfect Information Profit", color="blue", marker="o")
+    plt.plot(num_scenarios_list, profits_perfect, label="Perfect Information Profit", color="green", marker="o")
+    plt.plot(num_scenarios_list, evpi_values, label="EVPI", color="red", linestyle="--")
+    plt.xlabel("Number of Scenarios")
+    plt.ylabel("Profit / EVPI")
+    plt.title("Profit and EVPI vs. Number of Scenarios")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    print("Simulation Complete!")
 
 if __name__ == '__main__':
     testdata = False
@@ -432,12 +485,11 @@ if __name__ == '__main__':
             rho_discharge=0.9,
             soc_max = 120,
             soc_init=10,
-            charging_capacity= 40,
-            perfect_information = True
+            charging_capacity= 40
         )
     else:
-        num_wind_scenarios = 1
-        num_price_scenarios = 1
+        num_wind_scenarios = 7
+        num_price_scenarios = 7
         SCENARIOS = num_wind_scenarios * num_price_scenarios
         Scenarios = [i for i in range(1, SCENARIOS + 1)]
         Time = [i for i in range(1, 25)]
@@ -468,8 +520,7 @@ if __name__ == '__main__':
             rho_discharge=0.9,
             soc_max=120,
             soc_init=10,
-            charging_capacity=100,
-            perfect_information=False
+            charging_capacity=100
         )
 
     model = StochasticOfferingStrategy(input_data)
@@ -477,6 +528,11 @@ if __name__ == '__main__':
     model.display_results()
     model.plot_results()
 
-    model_PI = StochasticOfferingStrategy(input_data)
+
+    model_PI = StochasticOfferingStrategy(input_data, perfect_information=True)
     model_PI.run()
     model_PI.display_results()
+    calculate_evpi(model, model_PI)
+
+    # Run the scenario simulation and plot the results
+    run_optimization_for_different_scenarios(max_scenarios=20)

@@ -74,19 +74,6 @@ class StochasticOfferingStrategy():
             for t in self.data.TIME
         }
 
-        # self.variables.charging_power = {
-        #     t: self.model.addVar(
-        #         lb=0, ub=self.data.charging_capacity, name=f'Charging power_h_{t}'
-        #     )
-        #     for t in self.data.TIME
-        # }
-        #
-        # self.variables.discharging_power = {
-        #     t: self.model.addVar(
-        #         lb=0, ub=self.data.charging_capacity, name=f'Discharging power_h_{t}'
-        #     )
-        #     for t in self.data.TIME
-        # }
 
         self.variables.soc = {
             (t, k): self.model.addVar(
@@ -124,17 +111,6 @@ class StochasticOfferingStrategy():
         }
 
     def _build_constraints(self):
-        # self.constraints.balancing_power = {
-        #     (t, k): self.model.addLConstr(
-        #         self.data.generator_availability[(t,k)] - self.variables.generator_production[t]
-        #         - self.variables.balancing_charge[(t,k)] + self.variables.balancing_discharge[(t,k)],
-        #         GRB.EQUAL,
-        #         self.variables.balancing_power[(t,k)],
-        #         name=f'Balancing power constraint_{t}_{k}'
-        #     )
-        #     for t in self.data.TIME
-        #     for k in self.data.SCENARIOS
-        # }
 
         self.constraints.balancing_constraint = {
             (t, k): self.model.addLConstr(
@@ -146,27 +122,6 @@ class StochasticOfferingStrategy():
             for t in self.data.TIME
             for k in self.data.SCENARIOS
         }
-
-        # self.constraints.DA_power_constraint = {
-        #     (t): self.model.addLConstr(
-        #        self.variables.generator_production[t],
-        #         GRB.EQUAL,
-        #         -self.variables.charging_power[t] +self.variables.discharging_power[t],
-        #         name=f'DA power constraint_{t}'
-        #     )
-        #     for t in self.data.TIME
-        # }
-
-        # self.constraints.max_DA_production_constraint = {
-        #     (t, k): self.model.addLConstr(
-        #         self.variables.generator_production[(t)] + self.variables.charging_power[(t)] + self.variables.balancing_charge[(t, k)],
-        #         GRB.LESS_EQUAL,
-        #         self.data.generator_availability[(t, k)],
-        #         name=f'Max DA production constraint_{t}_{k}'
-        #     )
-        #     for t in self.data.TIME
-        #     for k in self.data.SCENARIOS
-        # }
 
         self.constraints.SOC_max = {
             (t, k): self.model.addLConstr(
