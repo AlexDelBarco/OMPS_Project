@@ -1,5 +1,7 @@
 import gurobipy as gp
 from gurobipy import GRB
+from sympy import false
+
 from scenario_generation_function import generate_scenarios
 import matplotlib.pyplot as plt
 
@@ -27,7 +29,8 @@ class InputData:
             rho_discharge: float,
             soc_max: float,
             soc_init: float,
-            charging_capacity: float
+            charging_capacity: float,
+            perfect_information = False
     ):
         # List of scenarios
         self.SCENARIOS = SCENARIOS
@@ -55,38 +58,37 @@ class InputData:
         self.soc_init = soc_init
         # power output of battery
         self.charging_capacity = charging_capacity
-
+        self.perfect_information = perfect_information
 
 class StochasticOfferingStrategy():
 
-    def __init__(self, input_data: InputData):
+    def __init__(self, input_data: InputData, risk_averse: bool = False, alpha: float = 1.0, beta: float = 0):
         self.data = input_data
+        self.risk_averse = risk_averse
+        self.alpha = alpha
+        self.beta = beta
+        self.perfect_information = input_data.perfect_information
         self.variables = Expando()
         self.constraints = Expando()
         self.results = Expando()
         self._build_model()
 
     def _build_variables(self):
-        self.variables.generator_production = {
-            t: self.model.addVar(
-                lb=0, ub=self.data.generator_capacity, name=f'DA production_h_{t}'
-            )
-            for t in self.data.TIME
-        }
-
-        # self.variables.charging_power = {
-        #     t: self.model.addVar(
-        #         lb=0, ub=self.data.charging_capacity, name=f'Charging power_h_{t}'
-        #     )
-        #     for t in self.data.TIME
-        # }
-        #
-        # self.variables.discharging_power = {
-        #     t: self.model.addVar(
-        #         lb=0, ub=self.data.charging_capacity, name=f'Discharging power_h_{t}'
-        #     )
-        #     for t in self.data.TIME
-        # }
+        if self.perfect_information:
+            self.variables.generator_production = {
+                (t,k): self.model.addVar(
+                    lb=0, ub=self.data.generator_capacity, name=f'DA production_h_{t}_{k}'
+                )
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
+            }
+        else:
+            self.variables.generator_production = {
+                t: self.model.addVar(
+                    lb=0, ub=self.data.generator_capacity, name=f'DA production_h_{t}'
+                )
+                for t in self.data.TIME
+            }
 
         self.variables.soc = {
             (t, k): self.model.addVar(
@@ -123,50 +125,44 @@ class StochasticOfferingStrategy():
             for k in self.data.SCENARIOS
         }
 
+        if self.risk_averse:
+            self.variables.zeta = {
+                t : self.model.addVar(lb=-GRB.INFINITY, ub=GRB.INFINITY, name=f'zeta_{t}')
+                for t in self.data.TIME
+            }
+
+            self.variables.eta = {
+                (t, k) : self.model.addVar(
+                    self.model.addVar(lb=0, name=f'eta_{t}_{k}')
+                )
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
+            }
+
     def _build_constraints(self):
-        # self.constraints.balancing_power = {
-        #     (t, k): self.model.addLConstr(
-        #         self.data.generator_availability[(t,k)] - self.variables.generator_production[t]
-        #         - self.variables.balancing_charge[(t,k)] + self.variables.balancing_discharge[(t,k)],
-        #         GRB.EQUAL,
-        #         self.variables.balancing_power[(t,k)],
-        #         name=f'Balancing power constraint_{t}_{k}'
-        #     )
-        #     for t in self.data.TIME
-        #     for k in self.data.SCENARIOS
-        # }
-
-        self.constraints.balancing_constraint = {
-            (t, k): self.model.addLConstr(
-                self.data.generator_availability[(t,k)] + self.variables.balancing_discharge[(t,k)],
-                GRB.EQUAL,
-                self.variables.generator_production[t] + self.variables.balancing_power[(t,k)] + self.variables.balancing_charge[(t,k)],
-                name=f'Balancing power constraint_{t}_{k}'
-            )
-            for t in self.data.TIME
-            for k in self.data.SCENARIOS
-        }
-
-        # self.constraints.DA_power_constraint = {
-        #     (t): self.model.addLConstr(
-        #        self.variables.generator_production[t],
-        #         GRB.EQUAL,
-        #         -self.variables.charging_power[t] +self.variables.discharging_power[t],
-        #         name=f'DA power constraint_{t}'
-        #     )
-        #     for t in self.data.TIME
-        # }
-
-        # self.constraints.max_DA_production_constraint = {
-        #     (t, k): self.model.addLConstr(
-        #         self.variables.generator_production[(t)] + self.variables.charging_power[(t)] + self.variables.balancing_charge[(t, k)],
-        #         GRB.LESS_EQUAL,
-        #         self.data.generator_availability[(t, k)],
-        #         name=f'Max DA production constraint_{t}_{k}'
-        #     )
-        #     for t in self.data.TIME
-        #     for k in self.data.SCENARIOS
-        # }
+        if self.perfect_information:
+            self.constraints.balancing_constraint = {
+                (t, k): self.model.addLConstr(
+                    self.data.generator_availability[(t, k)] + self.variables.balancing_discharge[(t, k)],
+                    GRB.EQUAL,
+                    self.variables.generator_production[(t,k)] + self.variables.balancing_power[(t, k)] +
+                    self.variables.balancing_charge[(t, k)],
+                    name=f'Balancing power constraint_{t}_{k}'
+                )
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
+            }
+        else:
+            self.constraints.balancing_constraint = {
+                (t, k): self.model.addLConstr(
+                    self.data.generator_availability[(t,k)] + self.variables.balancing_discharge[(t,k)],
+                    GRB.EQUAL,
+                    self.variables.generator_production[t] + self.variables.balancing_power[(t,k)] + self.variables.balancing_charge[(t,k)],
+                    name=f'Balancing power constraint_{t}_{k}'
+                )
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
+            }
 
         self.constraints.SOC_max = {
             (t, k): self.model.addLConstr(
@@ -203,19 +199,50 @@ class StochasticOfferingStrategy():
             for k in self.data.SCENARIOS
         }
 
+        if self.risk_averse:
+            self.constraints.eta_constraint = {
+                (t,k):self.model.addLConstr(
+                    self.variables.zeta[(t)]-self.variables.eta[(t,k)]
+                    -((self.data.da_price[(t-1)]-self.data.generator_cost)*self.variables.generator_production[t]
+                    +(self.variables.b_price[(t, k)] - self.data.generator_cost)*self.variables.balancing_power[(t,k)])
+                    ,GRB.LESS_EQUAL
+                    ,0
+                )
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
+            }
+
+
 
     def _build_objective_function(self):
-        objective = (
-            gp.quicksum(
+
+        if self.risk_averse:
+
+            objective = (
                 gp.quicksum(
-                    (self.data.da_price[(t-1)] - self.data.generator_cost) * self.variables.generator_production[t]
-                    + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
-                    for t in self.data.TIME
+                    gp.quicksum(
+                        (1-self.beta)*((self.data.da_price[(t - 1)] - self.data.generator_cost) * self.variables.generator_production[t]
+                        + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)])
+                        + self.beta*(self.variables.zeta[(t)]-((1/(1-self.alpha))*self.data.pi[k]*self.variables.eta[(t, k)]))
+                        for t in self.data.TIME
+                    )
+                    for k in self.data.SCENARIOS
                 )
-                for k in self.data.SCENARIOS
             )
-        )
-        self.model.setObjective(objective, GRB.MAXIMIZE)
+            self.model.setObjective(objective, GRB.MAXIMIZE)
+
+        else:
+            objective = (
+                gp.quicksum(
+                    gp.quicksum(
+                        (self.data.da_price[(t-1)] - self.data.generator_cost) * self.variables.generator_production[t]
+                        + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
+                        for t in self.data.TIME
+                    )
+                    for k in self.data.SCENARIOS
+                )
+            )
+            self.model.setObjective(objective, GRB.MAXIMIZE)
 
     def _build_model(self):
         self.model = gp.Model(name='Two-stage stochastic offering strategy')
@@ -405,7 +432,8 @@ if __name__ == '__main__':
             rho_discharge=0.9,
             soc_max = 120,
             soc_init=10,
-            charging_capacity= 40
+            charging_capacity= 40,
+            perfect_information = True
         )
     else:
         num_wind_scenarios = 1
@@ -440,7 +468,8 @@ if __name__ == '__main__':
             rho_discharge=0.9,
             soc_max=120,
             soc_init=10,
-            charging_capacity=100
+            charging_capacity=100,
+            perfect_information=False
         )
 
     model = StochasticOfferingStrategy(input_data)
@@ -448,7 +477,6 @@ if __name__ == '__main__':
     model.display_results()
     model.plot_results()
 
-
-    # model_PI = StochasticOfferingStrategy(input_data)
-    # model_PI.run()
-    # model_PI.display_results()
+    model_PI = StochasticOfferingStrategy(input_data)
+    model_PI.run()
+    model_PI.display_results()
