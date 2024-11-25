@@ -1,0 +1,14 @@
+\ Model Two-stage stochastic offering strategy_copy
+\ LP format - for model browsing. Use MPS format to capture full model detail.
+Maximize
+ 
+Subject To
+ DA_power_constraint_5_1: - DA_production_h_5 - Charging_power_h_5
+   + Discharging_power_h_5 = -88
+ DA_power_constraint_5_2: - DA_production_h_5 - Charging_power_h_5
+   + Discharging_power_h_5 = -50
+Bounds
+ DA_production_h_5 free
+ Charging_power_h_5 free
+ Discharging_power_h_5 free
+End
