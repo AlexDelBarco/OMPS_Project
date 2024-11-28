@@ -1,5 +1,6 @@
 import gurobipy as gp
 from gurobipy import GRB
+import numpy as np
 from scenario_generation_function import generate_scenarios
 import matplotlib.pyplot as plt
 
@@ -59,7 +60,7 @@ class InputData:
 
 class StochasticOfferingStrategy():
 
-    def __init__(self, input_data: InputData, risk_averse: bool = False, alpha: float = 1.0, beta: float = 0):
+    def __init__(self, input_data: InputData, risk_averse: bool = False, alpha: float = 0, beta: float = 0):
         self.data = input_data
         self.risk_averse = risk_averse
         self.alpha = alpha
@@ -177,8 +178,7 @@ class StochasticOfferingStrategy():
             self.constraints.eta_constraint = {
                 (t,k):self.model.addLConstr(
                     self.variables.zeta[(t)]-self.variables.eta[(t,k)]
-                    -((self.data.da_price[(t-1)]-self.data.generator_cost)*self.variables.generator_production[t]
-                    +(self.variables.b_price[(t, k)] - self.data.generator_cost)*self.variables.balancing_power[(t,k)])
+                    -((self.data.b_price[(t, k)] - self.data.generator_cost)*self.variables.balancing_power[(t,k)])
                     ,GRB.LESS_EQUAL
                     ,0
                 )
@@ -186,16 +186,40 @@ class StochasticOfferingStrategy():
                 for k in self.data.SCENARIOS
             }
 
-
     def _build_objective_function(self):
 
         if self.risk_averse:
+
             objective = (gp.quicksum(gp.quicksum((1 - self.beta) * (
                         (self.data.da_price[(t - 1)] - self.data.generator_cost) * self.variables.generator_production[
                     t] + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) *
                         self.variables.balancing_power[(t, k)]) + self.beta * (self.variables.zeta[(t)] - (
-                        (1 / (1 - self.alpha)) * self.data.pi[k] * self.variables.eta[(t, k)])) for t in self.data.TIME)
+                        (1 / (1 - self.alpha)) * self.data.pi * self.variables.eta[(t, k)])) for t in self.data.TIME)
                                      for k in self.data.SCENARIOS))
+
+
+            objective = (
+                gp.quicksum(
+                    gp.quicksum(
+                        (self.data.da_price[(t - 1)] - self.data.generator_cost) * self.variables.generator_production[t] +
+                        (1 - self.beta) * (self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)])
+                        + self.beta * (self.variables.zeta[(t)] - ((1 / (1 - self.alpha)) * self.data.pi * self.variables.eta[(t, k)]))
+                    for t in self.data.TIME)
+                for k in self.data.SCENARIOS)
+            )
+
+
+
+
+            DA_Profit = gp.quicksum((self.data.da_price[(t-1)] - self.data.generator_cost) *self.variables.generator_production[t]for t in self.data.TIME)
+
+            BA_Profit = gp.quicksum((self.data.b_price[(t,k)]-self.data.generator_cost) * self.variables.balancing_power[(t,k)] for t in self.data.TIME for k in self.data.SCENARIOS)
+
+            CVaR = gp.quicksum(self.variables.zeta[t] - (1/(1-self.alpha))*self.data.pi * self.variables.eta[(t,k)] for t in self.data.TIME for k in self.data.SCENARIOS)
+
+
+
+            #objective = DA_Profit + (1-self.beta) * (BA_Profit) + self.beta * CVaR
             self.model.setObjective(objective, GRB.MAXIMIZE)
 
         else:
@@ -208,9 +232,9 @@ class StochasticOfferingStrategy():
     def _build_model(self):
         self.model = gp.Model(name='Two-stage stochastic offering strategy - Risk Aware')
         self._build_variables()
-        #self._build_constraints()
-        #self._build_objective_function()
-        #self.model.update()
+        self._build_constraints()
+        self._build_objective_function()
+        self.model.update()
 
 
     def _save_results(self):
@@ -232,14 +256,13 @@ class StochasticOfferingStrategy():
         }
 
         if self.risk_averse:
-            self.results.zeta = {
+            self.results.zeta ={
                 t : self.variables.zeta[t].x for t in self.data.TIME
             }
-
-            self.results.eta = {
-                (t,k): self.variables.eta[(t,k)].x for t in self.data.TIME for k in self.data.SCENARIOS
+            self.results.cvar = {
+                t: self.variables.zeta[t].x - 1 / (1 - self.alpha) * np.sum(self.data.pi * self.variables.eta[(t,k)].x for k in self.data.SCENARIOS)
+                for t in self.data.TIME
             }
-
 
     def run(self):
         self.model.optimize()
@@ -254,7 +277,6 @@ class StochasticOfferingStrategy():
             for c in self.model.getConstrs():
                 print(f"Constraint {c.ConstrName}: Slack={c.slack}")
             raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
-
 
     def display_results(self):
         print()
@@ -288,6 +310,16 @@ class StochasticOfferingStrategy():
                 print(round(self.results.balancing_discharge[(t, k)],1), end=", ")
             print()
         print("--------------------------------------------------")
+        if self.risk_averse:
+            print()
+            print("Risk-Aware Optimization")
+            print("Alpha: "+ str(self.alpha))
+            print("Beta: "+ str(self.beta))
+            print("--------------------------------------------------")
+            for t in self.data.TIME:
+                print(f"CVaR at Time {t}: "+str(self.results.cvar[t]), end="")
+                print(f"Zeta VaR: "+str(self.results.zeta[t]))
+                print()
 
     def plot_results(self):
         """
@@ -357,7 +389,7 @@ class StochasticOfferingStrategy():
 
 
 if __name__ == '__main__':
-    testdata = False
+    testdata = True
     if(testdata):
         generator_availability_values = {
             (1, 1): 33, (1, 2): 30, (1, 3): 27,
@@ -406,8 +438,8 @@ if __name__ == '__main__':
             charging_capacity= 40
         )
     else:
-        num_wind_scenarios = 1
-        num_price_scenarios = 1
+        num_wind_scenarios = 3
+        num_price_scenarios = 3
         SCENARIOS = num_wind_scenarios * num_price_scenarios
         Scenarios = [i for i in range(1, SCENARIOS + 1)]
         Time = [i for i in range(1, 25)]
@@ -416,6 +448,8 @@ if __name__ == '__main__':
         scenario_B_prices = {}
         scenario_windProd = {}
         scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
+
+
         scenario_DA_prices = [
             51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
             112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
@@ -433,7 +467,7 @@ if __name__ == '__main__':
             generator_availability=scenario_windProd,
             da_price=scenario_DA_prices,
             b_price=scenario_B_prices,
-            pi=pi,
+            pi = pi,
             rho_charge=0.9,  # TODO what were the rho values before??
             rho_discharge=0.9,
             soc_max=120,
@@ -441,10 +475,10 @@ if __name__ == '__main__':
             charging_capacity=100
         )
 
-    model = StochasticOfferingStrategy(input_data)
+    model = StochasticOfferingStrategy(input_data, True,0.95,1)
     model.run()
     model.display_results()
-    model.plot_results()
+    #model.plot_results()
 
 
     # model_PI = StochasticOfferingStrategy(input_data)
