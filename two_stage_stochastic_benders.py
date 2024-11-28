@@ -3,6 +3,7 @@ from gurobipy import GRB
 from scenario_generation_function import generate_scenarios
 import matplotlib.pyplot as plt
 
+# This file approaches to initialize the benders decomposition algorithm, for the sake of simplicity it is only done for a single hour
 
 class Expando(object):
     '''
@@ -172,6 +173,38 @@ class StochasticOfferingStrategy():
         )
         self.model.setObjective(objective, GRB.MAXIMIZE)
 
+    #Is used per scenario==iteration for creating the values for a bender's cut
+    def _SubproblemOptimization(self, fixed_generator_production, k, t, I):
+        optimalBalance = 0
+        dual = 0
+        self.submodel = gp.Model(name='Submodel')
+
+        # p_DA is fixed and p_B should be solved for the subproblem and then handed over back to thr main problem to determine the next fixed p_DA
+        p_DA = self.submodel.addVars(lb=0, ub=self.data.generator_capacity, name=f'DA production_h_{k}_{I}')
+        p_B = self.submodel.addVars(lb=0, ub=self.data.generator_capacity, name=f'Balancing power_{k}_{I}')
+
+        self.submodel.addLConstr(self.data.generator_availability[(t, k)] + self.variables.balancing_discharge[(t,k)], GRB.EQUAL, p_DA + p_B + self.variables.balancing_charge[(t,k)], name=f'Balancing power constraint_{k}_{I}')
+        fixed_complicating_variable_constraint = self.submodel.addLConstr(p_DA,GRB.EQUAL,fixed_generator_production, name=f'fixed_p_DA_constraint_{k}_{I}')
+
+
+        self.submodel.addLConstr(self.model.addLConstr(self.variables.soc[(t,k)], GRB.LESS_EQUAL, self.data.soc_max, name=f'Max state of charge constraint_{k}_{I}'))
+        #not really an idea how to treat the SOC variables...since we are iterating through the scenarios at a given/fixed time they are frozen or something
+        self.submodel.addLConstr(self.data.soc_init + self.variables.balancing_charge[(t,k)] * self.data.rho_charge - self.variables.balancing_discharge[(t,k)] * (1 / self.data.rho_discharge), GRB.EQUAL, self.variables.soc[(1, k)], name=f'SOC initial constraint{k}_{I}')
+        self.submodel.addLConstr(self.variables.soc[(t - 1, k)] + (self.variables.balancing_charge[(t,k)]) * self.data.rho_charge - (self.variables.balancing_discharge[(t,k)]) * (1 / self.data.rho_discharge), GRB.EQUAL, self.variables.soc[(t, k)], name=f'SOC time constraint_{k}_{I}')
+
+        subObjectivefunction = self.data.pi * (self.data.b_price[(t,k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
+        self.submodel.setObjective(subObjectivefunction, GRB.MAXIMIZE)
+
+        self.submodel.optimize()
+
+        if self.model.status == GRB.OPTIMAL:
+            return p_B.x, fixed_complicating_variable_constraint.pi
+
+
+
+
+        return optimalBalance, dual
+
     def _build_model(self):
         self.model = gp.Model(name='Two-stage stochastic offering strategy')
         self._build_variables()
@@ -211,6 +244,8 @@ class StochasticOfferingStrategy():
             for c in self.model.getConstrs():
                 print(f"Constraint {c.ConstrName}: Slack={c.slack}")
             raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
+
+
 
 
     def display_results(self):
@@ -347,9 +382,9 @@ if __name__ == '__main__':
         da_price = [51.49, 48.39, 82.15, 116.6, 42]
 
         input_data = InputData(
-            #SCENARIOS=[1, 2, 3, 4, 5],
-            SCENARIOS=[1],
-            TIME=[1, 2, 3, 4, 5],
+            SCENARIOS=[1, 2, 3, 4, 5],
+            #SCENARIOS=[1],
+            TIME=[1],
             generator_cost=20,
             generator_capacity= 48,
             generator_availability=generator_availability_values,
