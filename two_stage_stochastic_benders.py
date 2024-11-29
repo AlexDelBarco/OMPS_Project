@@ -68,7 +68,7 @@ class StochasticOfferingStrategy():
         self.variables_Main = Expando()
         self.constraints_Main = Expando()
         self.results = Expando()
-        self._build_Bender()
+
 
     def _build_variables(self, model):
         if(model.ModelName == "Main-Problem"):
@@ -81,8 +81,6 @@ class StochasticOfferingStrategy():
             self.constraints_Main.gamma_initial = self.main_model.addLConstr(self.variables_Main.gamma, GRB.GREATER_EQUAL, -GRB.INFINITY)
 
 
-
-
     #Is used per scenario==iteration for creating the values for a bender's cut
     def _SubproblemOptimization(self, fixed_generator_production, k, t, I):
         optimalBalance = 0
@@ -91,20 +89,20 @@ class StochasticOfferingStrategy():
 
         p_DA = fixed_generator_production
         # p_DA is fixed and p_B should be solved for the subproblem and then handed over back to thr main problem to determine the next fixed p_DA
-        p_B = self.submodel.addVars(lb=0, ub=self.data.generator_capacity, name=f'Balancing power_t{t}_k{k}_i{I}')
-        p_dis = self.submodel.addVars(lb=0, ub= self.data.charging_capacity, name=f'Balancing discharge_t{t}_k{k}_i{I}')
-        p_cha = self.submodel.addVars(lb=0, ub= self.data.charging_capacity, name=f'Balancing charge_t{t}_k{k}_i{I}')
-        SOC = self.submodel.addVars(lb=0, ub= self.data.soc_max, name=f'SOC t{t}_k{k}_i{I}')
+        p_B = self.submodel.addVar(lb=0, ub=self.data.generator_capacity, name='Balancing power_t'+str(t)+'_k'+str(k)+'_i'+str(I))
+        p_dis = self.submodel.addVar(lb=0, ub= self.data.charging_capacity, name='Balancing discharge_t'+str(t)+'+_k'+str(k)+'_i'+str(I))
+        p_cha = self.submodel.addVar(lb=0, ub= self.data.charging_capacity, name='Balancing charge_t'+str(t)+'+_k'+str(k)+'_i'+str(I))
+        SOC = self.submodel.addVar(lb=0, ub= self.data.soc_max, name='SOC t'+str(t)+'_k'+str(k)+'_i'+str(I))
 
 
-        self.submodel.addLConstr(self.data.generator_availability[(t, k)] + p_dis, GRB.EQUAL, p_DA + p_B + p_cha, name=f'Balancing power constraint_t{t}_k{k}_i{I}')
-        fixed_complicating_variable_constraint = self.submodel.addLConstr(p_DA,GRB.EQUAL,fixed_generator_production, name=f'fixed_p_DA_constraint_t{t}_k{k}_i{I}')
+        self.submodel.addLConstr(self.data.generator_availability[(t, k)] + p_dis, GRB.EQUAL, p_DA + p_B + p_cha, name='Balancing power constraint_t'+str(t)+'+_k'+str(k)+'_i'+str(I))
+        fixed_complicating_variable_constraint = self.submodel.addLConstr(p_DA,GRB.EQUAL,fixed_generator_production, name='fixed_p_DA_constraint_t'+str(t)+'+_k'+str(k)+'_i'+str(I))
 
 
         #not really an idea how to treat the SOC variables...since we are iterating through the scenarios at a given/fixed time they are frozen or something
-        self.submodel.addLConstr(self.data.soc_init + p_cha * self.data.rho_charge - p_dis * (1 / self.data.rho_discharge), GRB.EQUAL, self.variables.soc[(1, k)], name=f'SOC initial constraint_t{t}_k{k}_i{I}')
+        self.submodel.addLConstr(self.data.soc_init + p_cha * self.data.rho_charge - p_dis * (1 / self.data.rho_discharge), GRB.EQUAL, self.variables.soc[(1, k)], name='SOC initial constraint_t'+str(t)+'+_k'+str(k)+'_i'+str(I))
         #no idea how to treat them???
-        self.submodel.addLConstr(self.variables.soc[(t - 1, k)] + (p_cha) * self.data.rho_charge - (p_dis) * (1 / self.data.rho_discharge), GRB.EQUAL, SOC, name=f'SOC time constraint_t{t}_k{k}_i{I}')
+        self.submodel.addLConstr(self.variables.soc[(t - 1, k)] + (p_cha) * self.data.rho_charge - (p_dis) * (1 / self.data.rho_discharge), GRB.EQUAL, SOC, name='SOC time constraint_t'+str(t)+'+_k'+str(k)+'_i'+str(I))
 
         subObjectivefunction = self.data.pi * (self.data.b_price[(t,k)] - self.data.generator_cost) * p_B
         self.submodel.setObjective(subObjectivefunction, GRB.MAXIMIZE)
@@ -169,20 +167,7 @@ class StochasticOfferingStrategy():
 
 
     def run(self):
-        self.model.optimize()
-        if self.model.status == GRB.OPTIMAL:
-            self._save_results()
-        else:
-            self.model.computeIIS()
-            self.model.write("model.ilp")
-            print(f"optimization of {self.model.ModelName} was not successful")
-            for v in self.model.getVars():
-                print(f"Variable {v.varName}: LB={v.lb}, UB={v.ub}")
-            for c in self.model.getConstrs():
-                print(f"Constraint {c.ConstrName}: Slack={c.slack}")
-            raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
-
-
+        self._iterate_Bender()
 
 
     def display_results(self):
@@ -371,7 +356,7 @@ if __name__ == '__main__':
         )
 
     model = StochasticOfferingStrategy(input_data)
-    #model.run()
+    model.run()
     #model.display_results()
     #model.plot_results()
 
