@@ -1,3 +1,6 @@
+import random
+from random import randint
+
 import gurobipy as gp
 from gurobipy import GRB
 from scenario_generation_function import generate_scenarios
@@ -62,57 +65,66 @@ class StochasticOfferingStrategy():
 
     def __init__(self, input_data: InputData):
         self.data = input_data
-        self.variables = Expando()
-        self.constraints = Expando()
+        self.variables_Main = Expando()
+        self.variables_Sub = Expando()
+        self.constraints_Main = Expando()
+        self.variables_Sub = Expando()
         self.results = Expando()
-        self._build_model()
+        self._build_Bender()
 
-    def _build_variables(self):
-        self.variables.generator_production = {
-            t: self.model.addVar(
-                lb=0, ub=self.data.generator_capacity, name=f'DA production_h_{t}'
-            )
-            for t in self.data.TIME
-        }
+    def _build_variables(self, model):
+        if(model.ModelName == "Main-Problem"):
+            self.variables_Main.generator_production = self.main_model.addVar(lb=0, ub=self.data.generator_capacity, name=f'DA production')
+            self.variables_Main.gamma = self.main_model.addVar(lb=-GRB.INFINITY, ub=GRB.INFINITY, name="gamma")
+        elif(model.ModelName == "Sub-Problem"):
+            self.variables.generator_production = {
+                t: self.model.addVar(
+                    lb=0, ub=self.data.generator_capacity, name=f'DA production_h_{t}'
+                )
+                for t in self.data.TIME
+            }
 
+            self.variables.soc = {
+                (t, k): self.model.addVar(
+                    lb=0, ub=GRB.INFINITY, name=f'State of charge_{t}_{k}'
+                )
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
 
-        self.variables.soc = {
-            (t, k): self.model.addVar(
-                lb=0, ub=GRB.INFINITY, name=f'State of charge_{t}_{k}'
-            )
-            for t in self.data.TIME
-            for k in self.data.SCENARIOS
+            }
 
-        }
+            self.variables.balancing_discharge = {
+                (t, k): self.model.addVar(
+                    lb=0, ub=self.data.charging_capacity, name=f'Balancing_discharge_{t}_{k}'
+                )
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
 
-        self.variables.balancing_discharge = {
-            (t, k): self.model.addVar(
-                lb=0, ub=self.data.charging_capacity, name=f'Balancing_discharge_{t}_{k}'
-            )
-            for t in self.data.TIME
-            for k in self.data.SCENARIOS
+            }
 
-        }
+            self.variables.balancing_charge = {
+                (t, k): self.model.addVar(
+                    lb=0, ub=self.data.charging_capacity, name=f'Balancing_charge_{t}_{k}'
+                )
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
 
-        self.variables.balancing_charge = {
-            (t, k): self.model.addVar(
-                lb=0, ub=self.data.charging_capacity, name=f'Balancing_charge_{t}_{k}'
-            )
-            for t in self.data.TIME
-            for k in self.data.SCENARIOS
+            }
 
-        }
+            self.variables.balancing_power = {
+                (t, k): self.model.addVar(
+                    lb=0, ub=self.data.generator_capacity, name=f'Balancing power_{t}_{k}'
+                )
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
+            }
 
-        self.variables.balancing_power = {
-            (t, k): self.model.addVar(
-                lb=0, ub=self.data.generator_capacity, name=f'Balancing power_{t}_{k}'
-            )
-            for t in self.data.TIME
-            for k in self.data.SCENARIOS
-        }
+    def _build_constraints(self, model):
+        if(model.ModelName == "Main-Problem"):
+            self.constraints_Main.gamma_initial = self.main_model.addLConstr(self.variables_Main.gamma, GRB.GREATER_EQUAL, -GRB.INFINITY)
 
-    def _build_constraints(self):
-
+        elif(model.ModelName == "Sub-Problem"):
+            pass
         self.constraints.balancing_constraint = {
             (t, k): self.model.addLConstr(
                 self.data.generator_availability[(t,k)] + self.variables.balancing_discharge[(t,k)],
@@ -160,56 +172,83 @@ class StochasticOfferingStrategy():
         }
 
 
-    def _build_objective_function(self):
-        objective = (
-            gp.quicksum(
-                gp.quicksum(
-                    (self.data.da_price[(t-1)] - self.data.generator_cost) * self.variables.generator_production[t]
-                    + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
-                    for t in self.data.TIME
-                )
-                for k in self.data.SCENARIOS
-            )
-        )
-        self.model.setObjective(objective, GRB.MAXIMIZE)
+    def _build_objective_function(self, model):
+        pass
+
 
     #Is used per scenario==iteration for creating the values for a bender's cut
     def _SubproblemOptimization(self, fixed_generator_production, k, t, I):
         optimalBalance = 0
         dual = 0
-        self.submodel = gp.Model(name='Submodel')
+        self.submodel = gp.Model(name='Sub-Problem')
 
+        p_DA = fixed_generator_production
         # p_DA is fixed and p_B should be solved for the subproblem and then handed over back to thr main problem to determine the next fixed p_DA
-        p_DA = self.submodel.addVars(lb=0, ub=self.data.generator_capacity, name=f'DA production_h_{k}_{I}')
-        p_B = self.submodel.addVars(lb=0, ub=self.data.generator_capacity, name=f'Balancing power_{k}_{I}')
+        p_B = self.submodel.addVars(lb=0, ub=self.data.generator_capacity, name=f'Balancing power_t{t}_k{k}_i{I}')
+        p_dis = self.submodel.addVars(lb=0, ub= self.data.charging_capacity, name=f'Balancing discharge_t{t}_k{k}_i{I}')
+        p_cha = self.submodel.addVars(lb=0, ub= self.data.charging_capacity, name=f'Balancing charge_t{t}_k{k}_i{I}')
+        SOC = self.submodel.addVars(lb=0, ub= self.data.soc_max, name=f'SOC t{t}_k{k}_i{I}')
 
-        self.submodel.addLConstr(self.data.generator_availability[(t, k)] + self.variables.balancing_discharge[(t,k)], GRB.EQUAL, p_DA + p_B + self.variables.balancing_charge[(t,k)], name=f'Balancing power constraint_{k}_{I}')
-        fixed_complicating_variable_constraint = self.submodel.addLConstr(p_DA,GRB.EQUAL,fixed_generator_production, name=f'fixed_p_DA_constraint_{k}_{I}')
+
+        self.submodel.addLConstr(self.data.generator_availability[(t, k)] + p_dis, GRB.EQUAL, p_DA + p_B + p_cha, name=f'Balancing power constraint_t{t}_k{k}_i{I}')
+        fixed_complicating_variable_constraint = self.submodel.addLConstr(p_DA,GRB.EQUAL,fixed_generator_production, name=f'fixed_p_DA_constraint_t{t}_k{k}_i{I}')
 
 
-        self.submodel.addLConstr(self.model.addLConstr(self.variables.soc[(t,k)], GRB.LESS_EQUAL, self.data.soc_max, name=f'Max state of charge constraint_{k}_{I}'))
         #not really an idea how to treat the SOC variables...since we are iterating through the scenarios at a given/fixed time they are frozen or something
-        self.submodel.addLConstr(self.data.soc_init + self.variables.balancing_charge[(t,k)] * self.data.rho_charge - self.variables.balancing_discharge[(t,k)] * (1 / self.data.rho_discharge), GRB.EQUAL, self.variables.soc[(1, k)], name=f'SOC initial constraint{k}_{I}')
-        self.submodel.addLConstr(self.variables.soc[(t - 1, k)] + (self.variables.balancing_charge[(t,k)]) * self.data.rho_charge - (self.variables.balancing_discharge[(t,k)]) * (1 / self.data.rho_discharge), GRB.EQUAL, self.variables.soc[(t, k)], name=f'SOC time constraint_{k}_{I}')
+        self.submodel.addLConstr(self.data.soc_init + p_cha * self.data.rho_charge - p_dis * (1 / self.data.rho_discharge), GRB.EQUAL, self.variables.soc[(1, k)], name=f'SOC initial constraint_t{t}_k{k}_i{I}')
+        #no idea how to treat them???
+        self.submodel.addLConstr(self.variables.soc[(t - 1, k)] + (p_cha) * self.data.rho_charge - (p_dis) * (1 / self.data.rho_discharge), GRB.EQUAL, SOC, name=f'SOC time constraint_t{t}_k{k}_i{I}')
 
-        subObjectivefunction = self.data.pi * (self.data.b_price[(t,k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
+        subObjectivefunction = self.data.pi * (self.data.b_price[(t,k)] - self.data.generator_cost) * p_B
         self.submodel.setObjective(subObjectivefunction, GRB.MAXIMIZE)
 
         self.submodel.optimize()
 
         if self.model.status == GRB.OPTIMAL:
             return p_B.x, fixed_complicating_variable_constraint.pi
+        else:
+            print("Wir sin am arsch ihr kleinn Racker?")
+            return "Scheiben", "Kleister"
 
 
 
 
-        return optimalBalance, dual
+    def _build_Bender(self):
+        #Concipated for t =1, iterating through the scenarios
+        self.main_model = gp.Model(name='Main-Problem')
+        self._build_variables(self.main_model)
+        self._build_constraints(self.main_model)
+        t=1
+        I = 0
+        p_DA_fixed = random.randint(0,self.data.generator_capacity)
+        benderscuts = None
+        DA_Rev = (self.data.da_price[t]-self.data.generator_capacity)* self.variables_Main.generator_production + self.variables_Main.gamma
+        self.main_model.setObjective(DA_Rev, GRB.MAXIMIZE)
+        for k in self.data.SCENARIOS:
 
-    def _build_model(self):
-        self.model = gp.Model(name='Two-stage stochastic offering strategy')
-        self._build_variables()
-        self._build_constraints()
-        self._build_objective_function()
+            if hasattr(self.constraints_Main, "gamma_benders"):
+                self.main_model.remove(self.constraints_Main.gamma_benders)
+                self.main_model.update()
+
+
+            optimalBalance, dual = self._SubproblemOptimization(p_DA_fixed, k, t, I)
+
+            #incorporating bender's cut
+            B_Rev = self.data.pi * (self.data.b_price[(t,k)]-self.data.generator_cost)*optimalBalance
+            benderscuts = benderscuts + dual * (self.main_model.variables.generator_production-p_DA_fixed)
+            self.constraints_Main.gamma_benders = self.main_model.addLConstr(B_Rev + benderscuts, GRB.LESS_EQUAL, self.main_model.variables_Main.gamma)
+
+
+            self.main_model.optimize()
+
+
+
+            I = I +1
+
+
+
+
+
         self.model.update()
 
     #Save results is not changed yet
@@ -434,9 +473,9 @@ if __name__ == '__main__':
         )
 
     model = StochasticOfferingStrategy(input_data)
-    model.run()
-    model.display_results()
-    model.plot_results()
+    #model.run()
+    #model.display_results()
+    #model.plot_results()
 
 
     # model_PI = StochasticOfferingStrategy(input_data)
