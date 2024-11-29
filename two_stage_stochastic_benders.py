@@ -112,34 +112,44 @@ class StochasticOfferingStrategy():
         if self.submodel.status == GRB.OPTIMAL:
             return p_B.x, fixed_complicating_variable_constraint.pi
         else:
-            print("Wir sin am arsch ihr kleinn Racker?")
+            print("Wir sin am arsch ihr kleinn Racker!")
             return "Scheiben", "Kleister"
 
 
 
-
+    # start of the decompositioning algorithm, for now approahed for a fixed t
     def _iterate_Bender(self):
-        #Concipated for t =1, iterating through the scenarios
+
+
+        #initialising Master problem
         self.main_model = gp.Model(name='Main-Problem')
+        # p_DA and y_gamma
         self._build_variables(self.main_model)
+        #setting the first y_gamma constraint to y_gamma>=-INFINITY and p_DA < Pnorm
         self._build_constraints(self.main_model)
         t=1
         I = 0
         epsilon = 0
+        #first guess for p_DA that will be fixed in the subproblem
         p_DA_fixed = random.randint(0,self.data.generator_capacity)
         benderscuts = 0
+
+        #Master problems Objective function max((lambda_DA-c)*p_DA+y_gamma)
         DA_Rev = (self.data.da_price[t]-self.data.generator_capacity)* self.variables_Main.generator_production + self.variables_Main.gamma
         self.main_model.setObjective(DA_Rev, GRB.MAXIMIZE)
+
+        #loop that (should) solve the subproblem, alters y_gamma accordingly and adds the benders cuts
         for k in self.data.SCENARIOS:
 
+            #erases the y_gamma where the bender's cuts are added
             if hasattr(self.constraints_Main, "gamma_benders"):
                 self.main_model.remove(self.constraints_Main.gamma_benders)
                 self.main_model.update()
 
-
+            #solution of subproblem optimal p_B at given fixed p_DA and the corresponding dual variable of the conflicting constraint
             optimalBalance, dual = self._SubproblemOptimization(p_DA_fixed, k, t, I)
 
-            #incorporating bender's cut
+            #altering the y_gamma constraint by adding the current iterations benders cut
             B_Rev = self.data.pi * (self.data.b_price[(t,k)]-self.data.generator_cost)*optimalBalance
             benderscuts = benderscuts + dual * (self.main_model.variables.generator_production-p_DA_fixed)
             self.constraints_Main.gamma_benders = self.main_model.addLConstr(B_Rev + benderscuts, GRB.LESS_EQUAL, self.main_model.variables_Main.gamma)
@@ -148,6 +158,7 @@ class StochasticOfferingStrategy():
             self.main_model.optimize()
 
             if self.main_model.status == GRB.OPTIMAL:
+                #calculating the lower and upper bound and check for convergence
                 Lower_Bound = self.main_model.objVal
                 optimal_p_Da = self.main_model.variables.generator_production.x
                 Upper_bound = (self.data.da_price[t]-self.data.generator_capacity) * optimal_p_Da + self.data.pi * (self.data.b_price[(t,k)]-self.data.generator_cost)*optimalBalance
