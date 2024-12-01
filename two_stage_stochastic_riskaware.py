@@ -115,14 +115,19 @@ class StochasticOfferingStrategy():
         }
 
         if self.risk_averse:
-            self.variables.zeta = {
-                t : self.model.addVar(lb=-GRB.INFINITY, ub=GRB.INFINITY, name=f'zeta_{t}')
-                for t in self.data.TIME
-            }
+            # self.variables.zeta = {
+            #     t : self.model.addVar(lb=-GRB.INFINITY, ub=GRB.INFINITY, name=f'zeta_{t}')
+            #     for t in self.data.TIME
+            # }
+            self.variables.zeta = self.model.addVar(lb=-GRB.INFINITY, ub=GRB.INFINITY, name='zeta')
 
+            # self.variables.eta = {
+            #     (t, k) : self.model.addVar(lb=0, name=f'eta_{t}_{k}')
+            #     for t in self.data.TIME
+            #     for k in self.data.SCENARIOS
+            # }
             self.variables.eta = {
-                (t, k) : self.model.addVar(lb=0, name=f'eta_{t}_{k}')
-                for t in self.data.TIME
+                (k) : self.model.addVar(lb=0, name=f'eta_{k}')
                 for k in self.data.SCENARIOS
             }
 
@@ -177,7 +182,7 @@ class StochasticOfferingStrategy():
         if self.risk_averse:
             self.constraints.eta_constraint = {
                 (t,k):self.model.addLConstr(
-                    self.variables.zeta[(t)]-self.variables.eta[(t,k)]
+                    self.variables.zeta-self.variables.eta[(k)]
                     -((self.data.b_price[(t, k)] - self.data.generator_cost)*self.variables.balancing_power[(t,k)])
                     ,GRB.LESS_EQUAL
                     ,0
@@ -190,23 +195,33 @@ class StochasticOfferingStrategy():
 
         if self.risk_averse:
 
-            objective = (gp.quicksum(gp.quicksum((1 - self.beta) * (
-                        (self.data.da_price[(t - 1)] - self.data.generator_cost) * self.variables.generator_production[
-                    t] + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) *
-                        self.variables.balancing_power[(t, k)]) + self.beta * (self.variables.zeta[(t)] - (
-                        (1 / (1 - self.alpha)) * self.data.pi * self.variables.eta[(t, k)])) for t in self.data.TIME)
-                                     for k in self.data.SCENARIOS))
-
-
             objective = (
+                    (1 - self.beta) * (
                 gp.quicksum(
                     gp.quicksum(
-                        (self.data.da_price[(t - 1)] - self.data.generator_cost) * self.variables.generator_production[t] +
-                        (1 - self.beta) * (self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)])
-                        + self.beta * (self.variables.zeta[(t)] - ((1 / (1 - self.alpha)) * self.data.pi * self.variables.eta[(t, k)]))
-                    for t in self.data.TIME)
-                for k in self.data.SCENARIOS)
+                        (self.data.da_price[t - 1] - self.data.generator_cost) * self.variables.generator_production[t]
+                        + self.data.pi * (self.data.b_price[t, k] - self.data.generator_cost) *
+                        self.variables.balancing_power[t, k]
+                        for t in self.data.TIME
+                    )
+                    for k in self.data.SCENARIOS
+                )
             )
+                    + self.beta * (
+                            self.variables.zeta - (1 / (1 - self.alpha)) * gp.quicksum(
+                        self.data.pi * self.variables.eta[k] for k in self.data.SCENARIOS
+                        )
+                    )
+            )
+            # objective = (
+            #     gp.quicksum(
+            #         gp.quicksum(
+            #             (self.data.da_price[(t - 1)] - self.data.generator_cost) * self.variables.generator_production[t] +
+            #             (1 - self.beta) * (self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)])
+            #             + self.beta * (self.variables.zeta[(t)] - ((1 / (1 - self.alpha)) * self.data.pi * self.variables.eta[(t, k)]))
+            #         for t in self.data.TIME)
+            #     for k in self.data.SCENARIOS)
+            # )
 
 
 
@@ -215,7 +230,7 @@ class StochasticOfferingStrategy():
 
             BA_Profit = gp.quicksum((self.data.b_price[(t,k)]-self.data.generator_cost) * self.variables.balancing_power[(t,k)] for t in self.data.TIME for k in self.data.SCENARIOS)
 
-            CVaR = gp.quicksum(self.variables.zeta[t] - (1/(1-self.alpha))*self.data.pi * self.variables.eta[(t,k)] for t in self.data.TIME for k in self.data.SCENARIOS)
+            CVaR = gp.quicksum(self.variables.zeta - (1/(1-self.alpha))*self.data.pi * self.variables.eta[(k)] for k in self.data.SCENARIOS)
 
 
 
@@ -257,10 +272,10 @@ class StochasticOfferingStrategy():
 
         if self.risk_averse:
             self.results.zeta ={
-                t : self.variables.zeta[t].x for t in self.data.TIME
+                t : self.variables.zeta.x for t in self.data.TIME
             }
             self.results.cvar = {
-                t: self.variables.zeta[t].x - 1 / (1 - self.alpha) * np.sum(self.data.pi * self.variables.eta[(t,k)].x for k in self.data.SCENARIOS)
+                t: self.variables.zeta.x - 1 / (1 - self.alpha) * np.sum(self.data.pi * self.variables.eta[(k)].x for k in self.data.SCENARIOS)
                 for t in self.data.TIME
             }
 
@@ -315,11 +330,11 @@ class StochasticOfferingStrategy():
             print("Risk-Aware Optimization")
             print("Alpha: "+ str(self.alpha))
             print("Beta: "+ str(self.beta))
-            print("--------------------------------------------------")
-            for t in self.data.TIME:
-                print(f"CVaR at Time {t}: "+str(self.results.cvar[t]), end="")
-                print(f"Zeta VaR: "+str(self.results.zeta[t]))
-                print()
+            # print("--------------------------------------------------")
+            # for t in self.data.TIME:
+            #     print(f"CVaR at Time {t}: "+str(self.results.cvar[t]), end="")
+            #     print(f"Zeta VaR: "+str(self.results.zeta[t]))
+            #     print()
 
     def plot_results(self):
         """
@@ -386,6 +401,25 @@ class StochasticOfferingStrategy():
 
         plt.show()
 
+def run_riskaware_optimization(input_data, alpha_values, beta_values):
+    results = []
+    for alpha in alpha_values:
+        for beta in beta_values:
+            model = StochasticOfferingStrategy(input_data, risk_averse=True, alpha=alpha, beta=beta)
+            model.run()
+            results.append({
+                'alpha': alpha,
+                'beta': beta,
+                'objective_value': model.results.objective_value,
+                'generator_production': model.results.generator_production,
+                'balancing_power': model.results.balancing_power,
+                'balancing_charge': model.results.balancing_charge,
+                'balancing_discharge': model.results.balancing_discharge,
+                'soc': model.results.soc,
+                'zeta': model.results.zeta if model.risk_averse else None,
+                'cvar': model.results.cvar if model.risk_averse else None
+            })
+    return results
 
 
 if __name__ == '__main__':
@@ -423,7 +457,7 @@ if __name__ == '__main__':
 
         input_data = InputData(
             #SCENARIOS=[1, 2, 3, 4, 5],
-            SCENARIOS=[1],
+            SCENARIOS=[1,2],
             TIME=[1, 2, 3, 4, 5],
             generator_cost=20,
             generator_capacity= 48,
@@ -480,6 +514,14 @@ if __name__ == '__main__':
     model.display_results()
     #model.plot_results()
 
+    # Example usage:
+    alpha_values = [0.95]
+    beta_values = [0, 0.1, 0.2]
+    results = run_riskaware_optimization(input_data, alpha_values, beta_values)
+
+    # Display results
+    for result in results:
+        print(f"Alpha: {result['alpha']}, Beta: {result['beta']}, Objective Value: {result['objective_value']}")
 
     # model_PI = StochasticOfferingStrategy(input_data)
     # model_PI.run()
