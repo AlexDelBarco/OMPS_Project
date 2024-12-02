@@ -1,14 +1,13 @@
-\ Model Two-stage stochastic offering strategy_copy
+\ Model Iterative stochastic offering strategy_copy
 \ LP format - for model browsing. Use MPS format to capture full model detail.
 Maximize
  
 Subject To
- DA_power_constraint_5_1: - DA_production_h_5 - Charging_power_h_5
-   + Discharging_power_h_5 = -88
- DA_power_constraint_5_2: - DA_production_h_5 - Charging_power_h_5
-   + Discharging_power_h_5 = -50
+ Balancing_power_constraint_1_1: Balancing_discharge_1_1
+   - Balancing_charge_1_1 - Balancing_power_1_1 = 10.02059527553135
+ SOC_initial_constraint1_1: - State_of_charge_1_1
+   - 1.111111111111111 Balancing_discharge_1_1 + 0.9 Balancing_charge_1_1
+   = -10
 Bounds
- DA_production_h_5 free
- Charging_power_h_5 free
- Discharging_power_h_5 free
+ Balancing_discharge_1_1 free
 End

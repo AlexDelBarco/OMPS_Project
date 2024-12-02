@@ -35,8 +35,8 @@ class InputData:
         # List of scenarios
         self.SCENARIOS = SCENARIOS
         # List of time set
-        self.TIME = TIME,
-        self.hour = hour,
+        self.TIME = TIME
+        self.hour = hour
         # Generators costs (c^G_i)
         self.generator_cost = generator_cost
         # Wind availability in each scenario
@@ -86,10 +86,11 @@ class StochasticOfferingStrategy():
 
         self.variables.soc = {
             (t): self.model.addVar(
-                lb=0, ub=GRB.INFINITY, name=f'State of charge_{t}_{k}'
+                lb=0, ub=GRB.INFINITY, name=f'State of charge_{t}'
             )
-            for t in [self.data.hour-1, self.data.hour]
-        }
+            for t in [self.data.hour - 1, self.data.hour]
+            #for t in [h - 1 for h in self.data.hour] + list(self.data.hour)
+    }
 
         self.variables.balancing_discharge = {
             (t): self.model.addVar(
@@ -127,7 +128,7 @@ class StochasticOfferingStrategy():
 
         self.constraints.SOC_max = {
             (t, k): self.model.addLConstr(
-                self.variables.soc[(t,k)],
+                self.variables.soc[(t)],
                 GRB.LESS_EQUAL,
                 self.data.soc_max,
                 name=f'Max state of charge constraint_{t}_{k}'
@@ -160,12 +161,11 @@ class StochasticOfferingStrategy():
                 )
             }
 
-
     def _build_objective_function(self):
         objective = gp.quicksum(
             (self.data.da_price[t - 1] - self.data.generator_cost) * self.data.generator_dabid[t - 1]
             + self.data.pi * (self.data.b_price[t, k] - self.data.generator_cost) * self.variables.balancing_power[t, k]
-            for t in self.data.TIME
+            #for t in self.data.TIME
             for k in self.data.SCENARIOS
         )
         self.model.setObjective(objective, GRB.MAXIMIZE)
@@ -178,23 +178,54 @@ class StochasticOfferingStrategy():
         self.model.update()
 
     #Save results is not changed yet
-    def _save_results(self):
-        self.results.objective_value = self.model.ObjVal
-        self.results.balancing_power = {
-            (t): self.variables.balancing_power[(t)].x for t in self.data.TIME
+    #def _save_results(self):
+    #    self.results.objective_value = self.model.ObjVal
+    #    self.results.balancing_power = {
+    #        (t): self.variables.balancing_power[(t)].x for t in self.data.TIME
+    #    }
+    #    self.results.balancing_charge = {
+    #        (t): self.variables.balancing_charge[(t)].x for t in self.data.TIME
+    #    }
+    #    self.results.balancing_discharge = {
+    #        (t): self.variables.balancing_discharge[(t)].x for t in self.data.TIME
+    #    }
+    #    self.results.soc = {
+    #        (t): self.variables.soc[(t)].x for t in [self.data.hour-1, self.data.hour]
+    #    }
+
+    def _save_results(self, scenario, time):
+        self.results.objective_value[(scenario, time)] = self.model.ObjVal
+        self.results.balancing_power[(scenario, time)] = {
+            t: self.variables.balancing_power[(t)].x for t in self.data.TIME
         }
-        self.results.balancing_charge = {
-            (t): self.variables.balancing_charge[(t)].x for t in self.data.TIME
+        self.results.balancing_charge[(scenario, time)] = {
+            t: self.variables.balancing_charge[(t)].x for t in self.data.TIME
         }
-        self.results.balancing_discharge = {
-            (t): self.variables.balancing_discharge[(t)].x for t in self.data.TIME
+        self.results.balancing_discharge[(scenario, time)] = {
+            t: self.variables.balancing_discharge[(t)].x for t in self.data.TIME
         }
-        self.results.soc = {
-            (t): self.variables.soc[(t)].x for t in [self.data.hour-1, self.data.hour]
+        self.results.soc[(scenario, time)] = {
+            t: self.variables.soc[(t)].x for t in [self.data.hour - 1, self.data.hour]
         }
 
+    #def run(self):
+    #    for t in range(1,25):
+    #        self.setTime(t)
+    #        self.model.optimize()
+    #        if self.model.status == GRB.OPTIMAL:
+    #            self._save_results()
+    #        else:
+    #            self.model.computeIIS()
+    #            self.model.write("model.ilp")
+    #            print(f"optimization of {self.model.ModelName} was not successful")
+    #            for v in self.model.getVars():
+    #                print(f"Variable {v.varName}: LB={v.lb}, UB={v.ub}")
+    #            for c in self.model.getConstrs():
+    #                print(f"Constraint {c.ConstrName}: Slack={c.slack}")
+    #            raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
+
     def run(self):
-        for t in range(1,25):
+        for t in range(1, 25):  # Inner loop over time
             self.setTime(t)
             self.model.optimize()
             if self.model.status == GRB.OPTIMAL:
@@ -202,13 +233,12 @@ class StochasticOfferingStrategy():
             else:
                 self.model.computeIIS()
                 self.model.write("model.ilp")
-                print(f"optimization of {self.model.ModelName} was not successful")
+                print(f"Optimization of {self.model.ModelName} was not successful for scenario {k} at time {t}")
                 for v in self.model.getVars():
                     print(f"Variable {v.varName}: LB={v.lb}, UB={v.ub}")
                 for c in self.model.getConstrs():
                     print(f"Constraint {c.ConstrName}: Slack={c.slack}")
-                raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
-
+                raise RuntimeError(f"Optimization of {self.model.ModelName} was not successful")
 
     def display_results(self):
         print()
@@ -409,3 +439,5 @@ if __name__ == '__main__':
     # model_PI = StochasticOfferingStrategy(input_data)
     # model_PI.run()
     # model_PI.display_results()
+
+print('End')
