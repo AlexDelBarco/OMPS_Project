@@ -20,6 +20,7 @@ class InputData:
             generator_cost: float,
             generator_capacity: float,
             generator_availability: dict[tuple[int, int], float],
+            generator_DAbid: list,
             b_price: dict[tuple[int, int], float],
             da_price: list,
             pi: dict[int, float],
@@ -37,6 +38,7 @@ class InputData:
         self.generator_cost = generator_cost
         # Wind availability in each scenario
         self.generator_availability = generator_availability
+        self.generator_dabid = generator_DAbid
         # Generators capacity (P^G_i)
         self.generator_capacity = generator_capacity
         # Market clearing price DA(lambda_DA)
@@ -67,12 +69,12 @@ class StochasticOfferingStrategy():
         self._build_model()
 
     def _build_variables(self):
-        self.variables.generator_production = {
-            t: self.model.addVar(
-                lb=0, ub=self.data.generator_capacity, name=f'DA production_h_{t}'
-            )
-            for t in self.data.TIME
-        }
+    #     self.variables.generator_production = {
+    #         t: self.model.addVar(
+    #             lb=0, ub=self.data.generator_capacity, name=f'DA production_h_{t}'
+    #         )
+    #         for t in self.data.TIME
+    #     }
 
 
         self.variables.soc = {
@@ -116,7 +118,7 @@ class StochasticOfferingStrategy():
             (t, k): self.model.addLConstr(
                 self.data.generator_availability[(t,k)] + self.variables.balancing_discharge[(t,k)],
                 GRB.EQUAL,
-                self.variables.generator_production[t] + self.variables.balancing_power[(t,k)] + self.variables.balancing_charge[(t,k)],
+                self.data.generator_dabid[t-1] + self.variables.balancing_power[(t,k)] + self.variables.balancing_charge[(t,k)],
                 name=f'Balancing power constraint_{t}_{k}'
             )
             for t in self.data.TIME
@@ -163,7 +165,7 @@ class StochasticOfferingStrategy():
         objective = (
             gp.quicksum(
                 gp.quicksum(
-                    (self.data.da_price[(t-1)] - self.data.generator_cost) * self.variables.generator_production[t]
+                    (self.data.da_price[(t-1)] - self.data.generator_cost) * self.data.generator_dabid[t-1]
                     + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
                     for t in self.data.TIME
                 )
@@ -182,9 +184,6 @@ class StochasticOfferingStrategy():
     #Save results is not changed yet
     def _save_results(self):
         self.results.objective_value = self.model.ObjVal
-        self.results.generator_production = [
-            self.variables.generator_production[t].x for t in self.data.TIME
-            ]
         self.results.balancing_power = {
             (t, k): self.variables.balancing_power[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
         }
@@ -219,8 +218,6 @@ class StochasticOfferingStrategy():
         print("Expected day-ahead profit:")
         print(self.results.objective_value)
         print("Optimal generator offer:")
-        print(self.results.generator_production)
-        print("--------------------------------------------------")
         print("Optimal balancing offer:")
         #print(self.results.balancing_charge)
         for k in self.data.SCENARIOS:
@@ -258,7 +255,7 @@ class StochasticOfferingStrategy():
 
         # DA STAGE
         # Extract charging and discharging power
-        da_bid = {t: self.results.generator_production[t-1] for t in time}
+        #da_bid = {t: self.results.generator_production[t-1] for t in time}
         da_price = {t: self.data.da_price[t-1] for t in time}
 
         # Extract balancing bid (averaged over scenarios)
@@ -289,7 +286,7 @@ class StochasticOfferingStrategy():
                  color="blue", alpha=0.5)
         ax1.plot(time, [balancing_discharge[t, scenario] for t in time], label=f"Balancing discharge S{scenario}",
                  color="orange", alpha=0.5)
-        ax1.plot(time, [da_bid[t] for t in time], label="DA Bid", color="green", linestyle="--")
+        #ax1.plot(time, [da_bid[t] for t in time], label="DA Bid", color="green", linestyle="--")
         ax1.set_xlabel("Time (t)")
         ax1.set_xticks(time)
         ax1.set_ylabel("Power (MW)")
@@ -345,6 +342,7 @@ if __name__ == '__main__':
             (5, 1): 138.59, (5, 2): 129.44, (5, 3): 122.89, (5, 4): 112.47, (5, 5): 112.47
         }
         da_price = [51.49, 48.39, 82.15, 116.6, 42]
+        da_production = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 31.549490884357137, 32.76784850051348, 31.064958809504038, 31.332530016698215, 30.88555999023277, 28.76005112309651, 28.9701378870548, 0.0, 32.196188026852454, 0.0, 48.0, 0.0, 0.0, 33.55400332783193, 0.0, 0.0, 0.0]
 
         input_data = InputData(
             #SCENARIOS=[1, 2, 3, 4, 5],
@@ -363,8 +361,8 @@ if __name__ == '__main__':
             charging_capacity= 40
         )
     else:
-        num_wind_scenarios = 1
-        num_price_scenarios = 1
+        num_wind_scenarios = 2
+        num_price_scenarios = 3
         SCENARIOS = num_wind_scenarios * num_price_scenarios
         Scenarios = [i for i in range(1, SCENARIOS + 1)]
         Time = [i for i in range(1, 25)]
@@ -378,6 +376,8 @@ if __name__ == '__main__':
             112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
             155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
         ]
+        da_production = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 31.549490884357137, 32.76784850051348, 31.064958809504038, 31.332530016698215, 30.88555999023277, 28.76005112309651, 28.9701378870548, 0.0, 32.196188026852454, 0.0, 48.0, 0.0, 0.0, 33.55400332783193, 0.0, 0.0, 0.0]
+
 
         #Equal probability of each scenario 1/100
         pi = 1/SCENARIOS
@@ -388,6 +388,7 @@ if __name__ == '__main__':
             generator_cost=20,
             generator_capacity=48,
             generator_availability=scenario_windProd,
+            generator_DAbid = da_production,
             da_price=scenario_DA_prices,
             b_price=scenario_B_prices,
             pi=pi,
@@ -401,7 +402,7 @@ if __name__ == '__main__':
     model = StochasticOfferingStrategy(input_data)
     model.run()
     model.display_results()
-    model.plot_results()
+    #model.plot_results()
 
 
     # model_PI = StochasticOfferingStrategy(input_data)
