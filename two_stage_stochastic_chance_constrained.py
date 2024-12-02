@@ -416,6 +416,7 @@ if __name__ == '__main__':
             charging_capacity=100
         )
 
+    #try differnt values of epsilon and plot results.
     model = StochasticOfferingStrategy(input_data, epsilon=0.1)
     model.run()
     model.display_results()
