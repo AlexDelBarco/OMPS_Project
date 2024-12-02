@@ -17,6 +17,7 @@ class InputData:
             self,
             SCENARIOS: list,
             TIME: list,
+            hour: int,
             generator_cost: float,
             generator_capacity: float,
             generator_availability: dict[tuple[int, int], float],
@@ -26,6 +27,7 @@ class InputData:
             pi: dict[int, float],
             rho_charge: float,
             rho_discharge: float,
+            SOC: dict[tuple[int, int], float],
             soc_max: float,
             soc_init: float,
             charging_capacity: float
@@ -33,7 +35,8 @@ class InputData:
         # List of scenarios
         self.SCENARIOS = SCENARIOS
         # List of time set
-        self.TIME = TIME
+        self.TIME = TIME,
+        self.hour = hour,
         # Generators costs (c^G_i)
         self.generator_cost = generator_cost
         # Wind availability in each scenario
@@ -53,6 +56,7 @@ class InputData:
         self.rho_discharge = rho_discharge
         # Battery capacity (SOC)
         self.soc_max = soc_max
+        self.SOC = SOC
         # Initial battery soc
         self.soc_init = soc_init
         # power output of battery
@@ -68,6 +72,9 @@ class StochasticOfferingStrategy():
         self.results = Expando()
         self._build_model()
 
+    def setTime(self,hour):
+        self.hour = hour
+
     def _build_variables(self):
     #     self.variables.generator_production = {
     #         t: self.model.addVar(
@@ -78,47 +85,40 @@ class StochasticOfferingStrategy():
 
 
         self.variables.soc = {
-            (t, k): self.model.addVar(
+            (t): self.model.addVar(
                 lb=0, ub=GRB.INFINITY, name=f'State of charge_{t}_{k}'
             )
-            for t in self.data.TIME
-            for k in self.data.SCENARIOS
-
+            for t in [self.data.hour-1, self.data.hour]
         }
 
         self.variables.balancing_discharge = {
-            (t, k): self.model.addVar(
-                lb=0, ub=self.data.charging_capacity, name=f'Balancing_discharge_{t}_{k}'
+            (t): self.model.addVar(
+                lb=0, ub=self.data.charging_capacity, name=f'Balancing_discharge_{t}'
             )
             for t in self.data.TIME
-            for k in self.data.SCENARIOS
-
         }
 
         self.variables.balancing_charge = {
-            (t, k): self.model.addVar(
-                lb=0, ub=self.data.charging_capacity, name=f'Balancing_charge_{t}_{k}'
+            (t): self.model.addVar(
+                lb=0, ub=self.data.charging_capacity, name=f'Balancing_charge_{t}'
             )
             for t in self.data.TIME
-            for k in self.data.SCENARIOS
-
         }
 
         self.variables.balancing_power = {
-            (t, k): self.model.addVar(
-                lb=0, ub=self.data.generator_capacity, name=f'Balancing power_{t}_{k}'
+            (t): self.model.addVar(
+                lb=0, ub=self.data.generator_capacity, name=f'Balancing power_{t}'
             )
             for t in self.data.TIME
-            for k in self.data.SCENARIOS
         }
 
     def _build_constraints(self):
 
         self.constraints.balancing_constraint = {
             (t, k): self.model.addLConstr(
-                self.data.generator_availability[(t,k)] + self.variables.balancing_discharge[(t,k)],
+                self.data.generator_availability[(t,k)] + self.variables.balancing_discharge[(t)],
                 GRB.EQUAL,
-                self.data.generator_dabid[t-1] + self.variables.balancing_power[(t,k)] + self.variables.balancing_charge[(t,k)],
+                self.data.generator_dabid[t-1] + self.variables.balancing_power[(t)] + self.variables.balancing_charge[(t)],
                 name=f'Balancing power constraint_{t}_{k}'
             )
             for t in self.data.TIME
@@ -132,45 +132,41 @@ class StochasticOfferingStrategy():
                 self.data.soc_max,
                 name=f'Max state of charge constraint_{t}_{k}'
             )
-            for t in self.data.TIME
+            for t in [self.data.hour-1, self.data.hour]
             for k in self.data.SCENARIOS
         }
 
         self.constraints.SOC_time = {
             (t, k): self.model.addLConstr(
-                self.variables.soc[(t-1,k)] + (self.variables.balancing_charge[(t,k)])* self.data.rho_charge
-                - (self.variables.balancing_discharge[(t,k)]) * (1/self.data.rho_discharge),
+                self.variables.soc[(t-1,k)] + (self.variables.balancing_charge[(t)])* self.data.rho_charge
+                - (self.variables.balancing_discharge[(t)]) * (1/self.data.rho_discharge),
                 GRB.EQUAL,
                 self.variables.soc[(t,k)],
                 name=f'SOC time constraint_{t}_{k}'
             )
-            for t in self.data.TIME
+            for t in [self.data.hour-1, self.data.hour]
             for k in self.data.SCENARIOS
             if t > 1
         }
 
-        self.constraints.SOC_init = {
-            (k): self.model.addLConstr(
-                self.data.soc_init + ( self.variables.balancing_charge[(1,k)]) * self.data.rho_charge
-                - ( self.variables.balancing_discharge[(1,k)]) * (1/self.data.rho_discharge),
-                GRB.EQUAL,
-                self.variables.soc[(1,k)],
-                name=f'SOC initial constraint{1}_{k}'
-            )
-            for k in self.data.SCENARIOS
-        }
+        if self.data.hour == 1:
+            self.constraints.SOC_init = {
+                self.model.addLConstr(
+                    self.data.soc_init + ( self.variables.balancing_charge[(1)]) * self.data.rho_charge
+                    - ( self.variables.balancing_discharge[(1)]) * (1/self.data.rho_discharge),
+                    GRB.EQUAL,
+                    self.variables.soc[(1)],
+                    name=f'SOC initial constraint{1}'
+                )
+            }
 
 
     def _build_objective_function(self):
-        objective = (
-            gp.quicksum(
-                gp.quicksum(
-                    (self.data.da_price[(t-1)] - self.data.generator_cost) * self.data.generator_dabid[t-1]
-                    + self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)]
-                    for t in self.data.TIME
-                )
-                for k in self.data.SCENARIOS
-            )
+        objective = gp.quicksum(
+            (self.data.da_price[t - 1] - self.data.generator_cost) * self.data.generator_dabid[t - 1]
+            + self.data.pi * (self.data.b_price[t, k] - self.data.generator_cost) * self.variables.balancing_power[t, k]
+            for t in self.data.TIME
+            for k in self.data.SCENARIOS
         )
         self.model.setObjective(objective, GRB.MAXIMIZE)
 
@@ -185,31 +181,33 @@ class StochasticOfferingStrategy():
     def _save_results(self):
         self.results.objective_value = self.model.ObjVal
         self.results.balancing_power = {
-            (t, k): self.variables.balancing_power[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
+            (t): self.variables.balancing_power[(t)].x for t in self.data.TIME
         }
         self.results.balancing_charge = {
-            (t, k): self.variables.balancing_charge[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
+            (t): self.variables.balancing_charge[(t)].x for t in self.data.TIME
         }
         self.results.balancing_discharge = {
-            (t, k): self.variables.balancing_discharge[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
+            (t): self.variables.balancing_discharge[(t)].x for t in self.data.TIME
         }
         self.results.soc = {
-            (t, k): self.variables.soc[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
+            (t): self.variables.soc[(t)].x for t in [self.data.hour-1, self.data.hour]
         }
 
     def run(self):
-        self.model.optimize()
-        if self.model.status == GRB.OPTIMAL:
-            self._save_results()
-        else:
-            self.model.computeIIS()
-            self.model.write("model.ilp")
-            print(f"optimization of {self.model.ModelName} was not successful")
-            for v in self.model.getVars():
-                print(f"Variable {v.varName}: LB={v.lb}, UB={v.ub}")
-            for c in self.model.getConstrs():
-                print(f"Constraint {c.ConstrName}: Slack={c.slack}")
-            raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
+        for t in range(1,25):
+            self.setTime(t)
+            self.model.optimize()
+            if self.model.status == GRB.OPTIMAL:
+                self._save_results()
+            else:
+                self.model.computeIIS()
+                self.model.write("model.ilp")
+                print(f"optimization of {self.model.ModelName} was not successful")
+                for v in self.model.getVars():
+                    print(f"Variable {v.varName}: LB={v.lb}, UB={v.ub}")
+                for c in self.model.getConstrs():
+                    print(f"Constraint {c.ConstrName}: Slack={c.slack}")
+                raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
 
 
     def display_results(self):
@@ -217,7 +215,6 @@ class StochasticOfferingStrategy():
         print("-------------------   RESULTS  -------------------")
         print("Expected day-ahead profit:")
         print(self.results.objective_value)
-        print("Optimal generator offer:")
         print("Optimal balancing offer:")
         #print(self.results.balancing_charge)
         for k in self.data.SCENARIOS:
@@ -313,59 +310,61 @@ class StochasticOfferingStrategy():
 if __name__ == '__main__':
     testdata = False
     if(testdata):
-        generator_availability_values = {
-            (1, 1): 33, (1, 2): 30, (1, 3): 27,
-            (1, 4): 21, (1, 5): 20,
-            (2, 1): 20, (2, 2): 21, (2, 3): 31,
-            (2, 4): 17, (2, 5): 10,
-            (3, 1): 33, (3, 2): 27, (3, 3): 50,
-            (3, 4): 19, (3, 5): 80,
-            (4, 1): 21, (4, 2): 36, (4, 3): 50,
-            (4, 4): 50, (4, 5): 50,
-            (5, 1): 25, (5, 2): 39, (5, 3): 50,
-            (5, 4): 50, (5, 5): 50
-        }
-
-        b_price = {
-            (1, 1): 88.31, (1, 2): 136.25, (1, 3): 85.61, (1, 4): 137.09, (1, 5): 146.05,
-            (2, 1): 134.67, (2, 2): 96.76, (2, 3): 139.7, (2, 4): 96.58, (2, 5): 117.66,
-            (3, 1): 112.06, (3, 2): 86.55, (3, 3): 79.03, (3, 4): 115.01, (3, 5): 115.76,
-            (4, 1): 85.12, (4, 2): 122.11, (4, 3): 83.61, (4, 4): 80.92, (4, 5): 90.75,
-            (5, 1): 111.76, (5, 2): 141.14, (5, 3): 135.55, (5, 4): 75.47, (5, 5): 118.62
-        }
-
-        da_price = {
-            (1, 1): 51.49, (1, 2): 48.39, (1, 3): 48.92, (1, 4): 49.45, (1, 5): 42.72,
-            (2, 1): 50.84, (2, 2): 82.15, (2, 3): 100.96, (2, 4): 116.60, (2, 5): 112.20,
-            (3, 1): 108.54, (3, 2): 111.61, (3, 3): 114.02, (3, 4): 127.40, (3, 5): 134.02,
-            (4, 1): 142.18, (4, 2): 147.42, (4, 3): 155.91, (4, 4): 154.10, (4, 5): 148.30,
-            (5, 1): 138.59, (5, 2): 129.44, (5, 3): 122.89, (5, 4): 112.47, (5, 5): 112.47
-        }
-        da_price = [51.49, 48.39, 82.15, 116.6, 42]
-        da_production = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 31.549490884357137, 32.76784850051348, 31.064958809504038, 31.332530016698215, 30.88555999023277, 28.76005112309651, 28.9701378870548, 0.0, 32.196188026852454, 0.0, 48.0, 0.0, 0.0, 33.55400332783193, 0.0, 0.0, 0.0]
-
-        input_data = InputData(
-            #SCENARIOS=[1, 2, 3, 4, 5],
-            SCENARIOS=[1],
-            TIME=[1, 2, 3, 4, 5],
-            generator_cost=20,
-            generator_capacity= 48,
-            generator_availability=generator_availability_values,
-            da_price= da_price,
-            b_price=b_price,
-            pi=0.2,
-            rho_charge=0.9,
-            rho_discharge=0.9,
-            soc_max = 120,
-            soc_init=10,
-            charging_capacity= 40
-        )
+        print('')
+        # generator_availability_values = {
+        #     (1, 1): 33, (1, 2): 30, (1, 3): 27,
+        #     (1, 4): 21, (1, 5): 20,
+        #     (2, 1): 20, (2, 2): 21, (2, 3): 31,
+        #     (2, 4): 17, (2, 5): 10,
+        #     (3, 1): 33, (3, 2): 27, (3, 3): 50,
+        #     (3, 4): 19, (3, 5): 80,
+        #     (4, 1): 21, (4, 2): 36, (4, 3): 50,
+        #     (4, 4): 50, (4, 5): 50,
+        #     (5, 1): 25, (5, 2): 39, (5, 3): 50,
+        #     (5, 4): 50, (5, 5): 50
+        # }
+        #
+        # b_price = {
+        #     (1, 1): 88.31, (1, 2): 136.25, (1, 3): 85.61, (1, 4): 137.09, (1, 5): 146.05,
+        #     (2, 1): 134.67, (2, 2): 96.76, (2, 3): 139.7, (2, 4): 96.58, (2, 5): 117.66,
+        #     (3, 1): 112.06, (3, 2): 86.55, (3, 3): 79.03, (3, 4): 115.01, (3, 5): 115.76,
+        #     (4, 1): 85.12, (4, 2): 122.11, (4, 3): 83.61, (4, 4): 80.92, (4, 5): 90.75,
+        #     (5, 1): 111.76, (5, 2): 141.14, (5, 3): 135.55, (5, 4): 75.47, (5, 5): 118.62
+        # }
+        #
+        # da_price = {
+        #     (1, 1): 51.49, (1, 2): 48.39, (1, 3): 48.92, (1, 4): 49.45, (1, 5): 42.72,
+        #     (2, 1): 50.84, (2, 2): 82.15, (2, 3): 100.96, (2, 4): 116.60, (2, 5): 112.20,
+        #     (3, 1): 108.54, (3, 2): 111.61, (3, 3): 114.02, (3, 4): 127.40, (3, 5): 134.02,
+        #     (4, 1): 142.18, (4, 2): 147.42, (4, 3): 155.91, (4, 4): 154.10, (4, 5): 148.30,
+        #     (5, 1): 138.59, (5, 2): 129.44, (5, 3): 122.89, (5, 4): 112.47, (5, 5): 112.47
+        # }
+        # da_price = [51.49, 48.39, 82.15, 116.6, 42]
+        # da_production = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 31.549490884357137, 32.76784850051348, 31.064958809504038, 31.332530016698215, 30.88555999023277, 28.76005112309651, 28.9701378870548, 0.0, 32.196188026852454, 0.0, 48.0, 0.0, 0.0, 33.55400332783193, 0.0, 0.0, 0.0]
+        #
+        # input_data = InputData(
+        #     #SCENARIOS=[1, 2, 3, 4, 5],
+        #     SCENARIOS=[1],
+        #     TIME=[1, 2, 3, 4, 5],
+        #     generator_cost=20,
+        #     generator_capacity= 48,
+        #     generator_availability=generator_availability_values,
+        #     da_price= da_price,
+        #     b_price=b_price,
+        #     pi=0.2,
+        #     rho_charge=0.9,
+        #     rho_discharge=0.9,
+        #     soc_max = 120,
+        #     soc_init=10,
+        #     charging_capacity= 40
+        # )
     else:
         num_wind_scenarios = 2
         num_price_scenarios = 3
         SCENARIOS = num_wind_scenarios * num_price_scenarios
         Scenarios = [i for i in range(1, SCENARIOS + 1)]
-        Time = [i for i in range(1, 25)]
+        #Time = [i for i in range(1, 25)]
+        Time = [1]
 
         scescenario_DA_prices = {}
         scenario_B_prices = {}
@@ -377,7 +376,7 @@ if __name__ == '__main__':
             155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
         ]
         da_production = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 31.549490884357137, 32.76784850051348, 31.064958809504038, 31.332530016698215, 30.88555999023277, 28.76005112309651, 28.9701378870548, 0.0, 32.196188026852454, 0.0, 48.0, 0.0, 0.0, 33.55400332783193, 0.0, 0.0, 0.0]
-
+        SOC = [0 for i in range(1, 25)]
 
         #Equal probability of each scenario 1/100
         pi = 1/SCENARIOS
@@ -385,6 +384,7 @@ if __name__ == '__main__':
         input_data = InputData(
             SCENARIOS=Scenarios,
             TIME=Time,
+            hour=1,
             generator_cost=20,
             generator_capacity=48,
             generator_availability=scenario_windProd,
@@ -394,6 +394,7 @@ if __name__ == '__main__':
             pi=pi,
             rho_charge=0.9,  # TODO what were the rho values before??
             rho_discharge=0.9,
+            SOC = SOC,
             soc_max=120,
             soc_init=10,
             charging_capacity=100
