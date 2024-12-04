@@ -246,16 +246,41 @@ class StochasticOfferingStrategy():
             print()
         print("--------------------------------------------------")
 
+    def get_extreme_scenarios(self, scenario_windProd):
+        # Calculate total wind production for each scenario
+        total_wind_production = {k: sum(scenario_windProd[(t, k)] for t in range(1, 25)) for k in
+                                 range(1, len(self.data.SCENARIOS) + 1)}
 
-    def plot_results(self):
+        # Find the scenario with the minimum wind production
+        min_scenario = min(total_wind_production, key=total_wind_production.get)
+        min_wind_production = total_wind_production[min_scenario]
+
+        # Find the scenario with the maximum wind production
+        max_scenario = max(total_wind_production, key=total_wind_production.get)
+        max_wind_production = total_wind_production[max_scenario]
+
+        # Find the scenario with the median wind production
+        sorted_scenarios = sorted(total_wind_production.items(), key=lambda item: item[1])
+        median_index = len(sorted_scenarios) // 2
+        median_scenario = sorted_scenarios[median_index][0]
+        median_wind_production = sorted_scenarios[median_index][1]
+
+        print(f"Scenario with minimum wind production: {min_scenario} (Total: {min_wind_production})")
+        print(f"Scenario with maximum wind production: {max_scenario} (Total: {max_wind_production})")
+        print(f"Scenario with median wind production: {median_scenario} (Total: {median_wind_production})")
+
+
+    def plot_results(self, scenario_num):
         """
         Plots the SOC and other results such as charging/discharging power, DA bid, and balancing power.
         """
+        # inspected scenario
+        scenario = scenario_num
         time = self.data.TIME
         scenarios = self.data.SCENARIOS
 
         # Extract SOC
-        soc = {t: sum(self.results.soc[(t, k)] for k in scenarios) / len(scenarios) for t in time}
+        soc = soc = {(t, k): self.results.soc[(t, k)] for t in time for k in scenarios}
 
         # DA STAGE
         # Extract charging and discharging power
@@ -273,15 +298,15 @@ class StochasticOfferingStrategy():
         # Plot SOC
         fig, axs = plt.subplots(2, 1, figsize=(12, 12))
 
-        axs[0].plot(time, [soc[t] for t in time], label="State of Charge (SOC)", color="blue", marker="o")
+
+        axs[0].plot(time, [soc[t, scenario] for t in time], label="State of Charge (SOC)", color="blue", marker="o")
         axs[0].set_xlabel("Time (t)")
         axs[0].set_ylabel("SOC")
-        axs[0].set_title("State of Charge Over Time")
+        axs[0].set_title(f"SOC for S{scenario}")
         axs[0].grid(True)
         axs[0].legend()
 
-        # inspected scenario
-        scenario = 1
+
         axs[1].bar(time, [balancing_charge[t, scenario] for t in time], label=f"Balancing charge S{scenario}",
                    color="blue", alpha=0.5)
         axs[1].bar(time, [balancing_discharge[t, scenario] for t in time], label=f"Balancing discharge S{scenario}",
@@ -292,7 +317,7 @@ class StochasticOfferingStrategy():
         axs[1].set_xlabel("Time (t)")
         axs[1].set_xticks(time)
         axs[1].set_ylabel("Power (MW)")
-        axs[1].set_title("Day-Ahead, Charging/Discharging, and Balancing Power")
+        axs[1].set_title(f"Power  and Prices for S{scenario}")
         axs[1].grid(True)
         axs[1].legend()
 
@@ -312,10 +337,13 @@ class StochasticOfferingStrategy():
 
         lines1, labels1 = axs[1].get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
-        axs[1].legend(lines1 + lines2, labels1 + labels2, loc='upper left')
-
+        axs[1].legend(lines1, labels1, loc='upper left')
+        ax2.legend(lines2, labels2, loc='upper right')
+        #axs[1].legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+        plt.savefig(f'figure/s1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
         plt.tight_layout()
         plt.show()
+
 
 
 if __name__ == '__main__':
@@ -368,8 +396,8 @@ if __name__ == '__main__':
             charging_capacity= 40
         )
     else:
-        num_wind_scenarios = 1
-        num_price_scenarios = 1
+        num_wind_scenarios = 20
+        num_price_scenarios = 20
         SCENARIOS = num_wind_scenarios * num_price_scenarios
         Scenarios = [i for i in range(1, SCENARIOS + 1)]
         Time = [i for i in range(1, 25)]
@@ -406,7 +434,12 @@ if __name__ == '__main__':
     model = StochasticOfferingStrategy(input_data)
     model.run()
     model.display_results()
-    model.plot_results()
+
+    model.get_extreme_scenarios(scenario_windProd)
+    model.plot_results(scenario_num=19)
+    #model.plot_results(scenario_num=18)
+    model.plot_results(scenario_num=13)
+
 
 
     # model_PI = StochasticOfferingStrategy(input_data)
