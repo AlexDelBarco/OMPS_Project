@@ -3,6 +3,7 @@ from gurobipy import GRB
 from scenario_generation_function import generate_scenarios
 import matplotlib.pyplot as plt
 
+SOC_st = [0]
 
 for h in range(1,25):
     class InputData:
@@ -58,8 +59,8 @@ for h in range(1,25):
 
 
     if __name__ == '__main__':
-        num_wind_scenarios = 2
-        num_price_scenarios = 3
+        num_wind_scenarios = 1
+        num_price_scenarios = 5
         SCENARIOS = num_wind_scenarios * num_price_scenarios
         Scenarios = [i for i in range(1, SCENARIOS + 1)]
         Time = [1]
@@ -67,8 +68,10 @@ for h in range(1,25):
         scescenario_DA_prices = {}
         scenario_B_prices = {}
         scenario_windProd = {}
-        scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios,
-                                                                                      num_wind_scenarios)
+        scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
+
+        print(scenario_windProd)
+
         scenario_DA_prices = [
             51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
             112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
@@ -77,7 +80,15 @@ for h in range(1,25):
         da_production = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 31.549490884357137, 32.76784850051348, 31.064958809504038,
                          31.332530016698215, 30.88555999023277, 28.76005112309651, 28.9701378870548, 0.0,
                          32.196188026852454, 0.0, 48.0, 0.0, 0.0, 33.55400332783193, 0.0, 0.0, 0.0]
-        SOC = [0 for i in range(1, 25)]
+        SOC = SOC_st[-1]
+
+        b_price = {
+            (1, 1): 88.31, (1, 2): 136.25, (1, 3): 85.61, (1, 4): 137.09, (1, 5): 146.05,
+            (2, 1): 134.67, (2, 2): 96.76, (2, 3): 139.7, (2, 4): 96.58, (2, 5): 117.66,
+            (3, 1): 112.06, (3, 2): 86.55, (3, 3): 79.03, (3, 4): 115.01, (3, 5): 115.76,
+            (4, 1): 85.12, (4, 2): 122.11, (4, 3): 83.61, (4, 4): 80.92, (4, 5): 90.75,
+            (5, 1): 111.76, (5, 2): 141.14, (5, 3): 135.55, (5, 4): 75.47, (5, 5): 118.62
+        }
 
         # Equal probability of each scenario 1/100
         pi = 1 / SCENARIOS
@@ -239,6 +250,9 @@ for h in range(1,25):
                 (t, k): self.variables.soc[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
             }
 
+            self.results.soc_aggregated = {t: sum(self.variables.soc[(t, k)].x for k in self.data.SCENARIOS)
+                                           for t in self.data.TIME}
+
         def run(self):
             self.model.optimize()
             if self.model.status == GRB.OPTIMAL:
@@ -257,6 +271,9 @@ for h in range(1,25):
 
     model = StochasticOfferingStrategy(input_data)
     model.run()
+
+    soc_value = sum(model.results.soc[(1, k)] for k in model.data.SCENARIOS)
+    SOC_st.append(soc_value/SCENARIOS)
     #model.display_results()
 
 print('End')
