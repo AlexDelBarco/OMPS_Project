@@ -311,6 +311,143 @@ class StochasticOfferingStrategy():
 
         plt.show()
 
+    def plot_results2(self):
+        """
+        Plots the SOC and other results such as charging/discharging power, DA bid, and balancing power.
+        """
+        time = self.data.TIME
+        scenarios = self.data.SCENARIOS
+
+        # Extract SOC
+        soc = {t: sum(self.results.soc[(t, k)] for k in scenarios) / len(scenarios) for t in time}
+
+        # DA STAGE
+        # Extract charging and discharging power
+        da_bid = {t: self.results.generator_production[t - 1] for t in time}
+        da_price = {t: self.data.da_price[t - 1] for t in time}
+
+        # Extract balancing bid (averaged over scenarios)
+        balancing_bid = {(t, k): self.results.balancing_power[(t, k)] for t in time for k in scenarios}
+        balancing_charge = {(t, k): self.results.balancing_charge[(t, k)] for t in time for k in scenarios}
+        balancing_discharge = {(t, k): self.results.balancing_discharge[(t, k)] for t in time for k in scenarios}
+        balancing_price = {(t, k): self.data.b_price[(t, k)] for t in time for k in scenarios}
+
+        # Plot SOC
+        plt.figure(figsize=(12, 8))
+        plt.subplot(2, 1, 1)
+        plt.plot(time, [soc[t] for t in time], label="State of Charge (SOC)", color="blue", marker="o")
+        plt.xlabel("Time (t)")
+        plt.ylabel("SOC")
+        plt.title("State of Charge Over Time")
+        plt.grid(True)
+        plt.legend()
+
+        # inspected scenario
+        scenario = 1
+        plt.subplot(2, 1, 2)
+        ax1 = plt.gca()
+        ax1.plot(time, [balancing_bid[t, scenario] for t in time], label=f"Balancing Bid for S{scenario}",
+                 color="green", marker="x")
+        ax1.plot(time, [balancing_charge[t, scenario] for t in time], label=f"Balancing charge S{scenario}",
+                 color="blue", alpha=0.5)
+        ax1.plot(time, [balancing_discharge[t, scenario] for t in time], label=f"Balancing discharge S{scenario}",
+                 color="orange", alpha=0.5)
+        ax1.plot(time, [da_bid[t] for t in time], label="DA Bid", color="green", linestyle="--")
+        ax1.set_xlabel("Time (t)")
+        ax1.set_xticks(time)
+        ax1.set_ylabel("Power (MW)")
+        ax1.set_title("Day-Ahead, Charging/Discharging, and Balancing Power")
+        ax1.grid(True)
+
+        # Create a secondary y-axis for prices
+        ax2 = ax1.twinx()
+        ax2.plot(time, [balancing_price[t, scenario] for t in time], label=f"Balancing Price S{scenario}",
+                 color="red", alpha=0.5)
+        ax2.plot(time, [da_price[t] for t in time], label="DA Price", color="red", linestyle="--", alpha=0.5)
+        ax2.set_ylabel("Price ($)")
+
+        # Add legends for both axes
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1, labels1, loc='upper left')
+        ax2.legend(lines2, labels2, loc='upper right')
+
+        plt.tight_layout()
+        plt.show()
+
+    import matplotlib.pyplot as plt
+
+    import matplotlib.pyplot as plt
+
+    def plot_results(self):
+        """
+        Plots the SOC and other results such as charging/discharging power, DA bid, and balancing power.
+        """
+        time = self.data.TIME
+        scenarios = self.data.SCENARIOS
+
+        # Extract SOC
+        soc = {t: sum(self.results.soc[(t, k)] for k in scenarios) / len(scenarios) for t in time}
+
+        # DA STAGE
+        # Extract charging and discharging power
+        da_bid = {t: self.results.generator_production[t - 1] for t in time}
+        da_price = {t: self.data.da_price[t - 1] for t in time}
+
+        # Extract balancing bid (averaged over scenarios)
+        balancing_bid = {(t, k): self.results.balancing_power[(t, k)] for t in time for k in scenarios}
+        balancing_charge = {(t, k): self.results.balancing_charge[(t, k)] for t in time for k in scenarios} \
+        # multiply each element of balancing chaarge by -1
+        balancing_charge = {key: -value for key, value in balancing_charge.items()}
+        balancing_discharge = {(t, k): self.results.balancing_discharge[(t, k)] for t in time for k in scenarios}
+        balancing_price = {(t, k): self.data.b_price[(t, k)] for t in time for k in scenarios}
+
+        # Plot SOC
+        fig, axs = plt.subplots(2, 1, figsize=(12, 12))
+
+        axs[0].plot(time, [soc[t] for t in time], label="State of Charge (SOC)", color="blue", marker="o")
+        axs[0].set_xlabel("Time (t)")
+        axs[0].set_ylabel("SOC")
+        axs[0].set_title("State of Charge Over Time")
+        axs[0].grid(True)
+        axs[0].legend()
+
+        # inspected scenario
+        scenario = 1
+        axs[1].bar(time, [balancing_charge[t, scenario] for t in time], label=f"Balancing charge S{scenario}",
+                   color="blue", alpha=0.5)
+        axs[1].bar(time, [balancing_discharge[t, scenario] for t in time], label=f"Balancing discharge S{scenario}",
+                   color="orange", alpha=0.5)
+        axs[1].plot(time, [balancing_bid[t, scenario] for t in time], label=f"Balancing Bid for S{scenario}",
+                    color="green", marker="x")
+        axs[1].plot(time, [da_bid[t] for t in time], label="DA Bid", color="green", linestyle="--")
+        axs[1].set_xlabel("Time (t)")
+        axs[1].set_xticks(time)
+        axs[1].set_ylabel("Power (MW)")
+        axs[1].set_title("Day-Ahead, Charging/Discharging, and Balancing Power")
+        axs[1].grid(True)
+        axs[1].legend()
+
+        # Create a secondary y-axis for prices
+        ax2 = axs[1].twinx()
+        ax2.plot(time, [balancing_price[t, scenario] for t in time], label=f"Balancing Price S{scenario}", color="red",
+                 alpha=0.5)
+        ax2.plot(time, [da_price[t] for t in time], label="DA Price", color="red", linestyle="--", alpha=0.5)
+
+        # the next few lines are necessary for aligning the price and power axis
+        ylim = max(axs[1].get_ylim())
+        negative_percentage = ((min(balancing_charge.values()) /ylim))
+        negative_percentage = (min(axs[1].get_ylim()) /ylim)
+        ax2.set_ylim((max(ax2.get_ylim())*negative_percentage), max(ax2.get_ylim()))  # Set y-axis limits for prices
+        ax2.set_ylabel("Price ($)")
+
+
+        lines1, labels1 = axs[1].get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        axs[1].legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+
+        plt.tight_layout()
+        plt.show()
 
 
 if __name__ == '__main__':
