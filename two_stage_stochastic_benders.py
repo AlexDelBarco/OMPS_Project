@@ -128,7 +128,7 @@ class StochasticOfferingStrategy():
             self.constraints_Main.gamma = model.addLConstr(
                 self.variables_Main.gamma,
                 GRB.GREATER_EQUAL,
-                new_gamma,
+                new_gamma,      #TODO what is new gamma?
                 name=f'Gamma contraint_{k}')
 
         if model.ModelName == "Sub-Problem":
