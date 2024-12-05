@@ -96,7 +96,7 @@ class StochasticOfferingStrategy():
             # p_DA
             self.variables_sub.p_DA = {
                 t: model.addVar(
-                    lb=0, ub=GRB.INFINITY, name=f'DA power_h_{t}'
+                    lb=0, ub=self.data.generator_capacity, name=f'DA power_h_{t}'
                 )
                 for t in self.data.TIME
             }
@@ -123,11 +123,11 @@ class StochasticOfferingStrategy():
             }
 
 
-    def _build_constraints(self, model, k, fixed_generator_production, new_gamma):
+    def _build_constraints(self, model, k, p_DA_fixed, new_gamma):
         if(model.ModelName == "Main-Problem"):
             self.constraints_Main.gamma = model.addLConstr(
                 self.variables_Main.gamma,
-                GRB.GREATER_EQUAL,
+                GRB.LESS_EQUAL,
                 new_gamma,      #TODO what is new gamma?
                 name=f'Gamma contraint_{k}')
 
@@ -145,8 +145,8 @@ class StochasticOfferingStrategy():
             self.constraints_sub.DA_constraint = {
                 t: model.addLConstr( self.variables_sub.p_DA[t],
                     GRB.EQUAL,
-                    fixed_generator_production,
-                    name=f'Fixed p_DA constraint')
+                    p_DA_fixed[t],
+                    name=f'Fixed p_DA constraint_{t}_{k}')
                 for t in self.data.TIME
             }
 
@@ -162,7 +162,7 @@ class StochasticOfferingStrategy():
                                 1 / self.data.rho_discharge),
                     GRB.EQUAL,
                     self.variables_sub.soc[t],
-                    name=f'SOC time constraint_h_{t}'
+                    name=f'SOC time constraint_h_{t}_{k}'
                 )
                 for t in self.data.TIME
                 if t > 1
@@ -184,29 +184,52 @@ class StochasticOfferingStrategy():
             model.setObjective(subObjectivefunction, GRB.MAXIMIZE)
 
     #Is used per scenario==iteration for creating the values for a bender's cut
-    def _SubproblemOptimization(self, fixed_generator_production, k):
+    def _SubproblemOptimization(self, p_DA_fixed, k):
         optimalBalance = 0
         dual = 0
         self.submodel = gp.Model(name='Sub-Problem')
         self._build_variables(self.submodel)
-        self._build_constraints(self.submodel, k, fixed_generator_production, 0)
+        self._build_constraints(self.submodel, k, p_DA_fixed, 0)
         self._build_objective_function(self.submodel, k)
         self.submodel.optimize()
 
         if self.submodel.status == GRB.OPTIMAL:
             submodel_solution_p_B = np.zeros(len(self.data.TIME))
             submodel_solution_DA_constraint = np.zeros(len(self.data.TIME))
+            submodel_soc = np.zeros(len(self.data.TIME))
+            submodel_p_Cha = np.zeros(len(self.data.TIME))
+            submodel_p_dis = np.zeros(len(self.data.TIME))
             for t in range(len(self.data.TIME)):
                 submodel_solution_p_B[t] = self.variables_sub.p_B[t+1].x
                 submodel_solution_DA_constraint[t] = self.constraints_sub.DA_constraint[t+1].pi
+                submodel_soc[t] = self.variables_sub.soc[t+1].x
+                submodel_p_Cha[t] = self.variables_sub.p_cha[t+1].x
+                submodel_p_dis[t] = self.variables_sub.p_dis[t+1].x
+
+
+
             return submodel_solution_p_B, submodel_solution_DA_constraint
         else:
-            print("Wir sin am arsch ihr kleinn Racker!")
-            return "Scheiben", "Kleister"
+            if self.submodel.Status == GRB.INFEASIBLE:
+                self.submodel.computeIIS()
+
+                # Write IIS to a file
+                self.submodel.write("model.ilp")
+
+                print("Subproblem - Irreducible Inconsistent Subsystem (IIS):")
+
+                for constr in self.submodel.getConstrs():
+                    if constr.IISConstr:
+                        print(f"Infeasible constraint: {constr.ConstrName}")
+
+            elif self.submodel.Status == GRB.UNBOUNDED:
+                print("Subproblem - Unbounded Subsystem (UNBOUNDED):")
+
+            return False, False
 
     # start of the decompositioning algorithm, for now approahed for a fixed t
     def _iterate_Bender(self):
-        new_gamma = -GRB.INFINITY
+        new_gamma = -100
         #initialising Master problem
         self.main_model = gp.Model(name='Main-Problem')
         # p_DA and y_gamma
@@ -217,7 +240,8 @@ class StochasticOfferingStrategy():
         I = 0
         epsilon = 20
         #first guess for p_DA that will be fixed in the subproblem
-        p_DA_fixed = random.randint(0,self.data.generator_capacity)
+        #p_DA_fixed = float(random.randint(0,self.data.generator_capacity))
+        p_DA_fixed = {t:20.0 for t in self.data.TIME}
         benderscuts = 0
 
         #Master problems Objective function max((lambda_DA-c)*p_DA+y_gamma)
@@ -225,50 +249,70 @@ class StochasticOfferingStrategy():
 
         #loop that (should) solve the subproblem, alters y_gamma accordingly and adds the benders cuts
         for k in self.data.SCENARIOS:
-            #erases the y_gamma where the bender's cuts are added
-            if hasattr(self.constraints_Main, "gamma_benders"):
-                self.main_model.remove(self.constraints_Main.gamma_benders)
-                self.main_model.update()
 
             #solution of subproblem optimal p_B at given fixed p_DA and the corresponding dual variable of the conflicting constraint
             optimalBalance, dual = self._SubproblemOptimization(p_DA_fixed, k)
 
-            #altering the y_gamma constraint by adding the current iterations benders cut
-            benderscuts += gp.quicksum(dual[t-1] * (self.variables_Main.generator_production[t] - p_DA_fixed) for t in self.data.TIME)
-            self.constraints_Main.gamma_benders = {
-                t: self.main_model.addLConstr(
-                    self.data.pi * (self.data.b_price[(t,k)]-self.data.generator_cost) * optimalBalance[t-1] + benderscuts,
-                    GRB.LESS_EQUAL,
-                    self.variables_Main.gamma,
-                    name=f'Gamma contraint for benders_{t}_{k}'
-                )
-                for t in self.data.TIME
-            }
-            print(I)
-            print(new_gamma)
-            self._build_constraints(self.main_model, 0, 0, new_gamma)
-
-            self.main_model.update()
-            self.main_model.optimize()
-
-            if self.main_model.status == GRB.OPTIMAL:
-                new_gamma = self.variables_Main.gamma.x
-                #calculating the lower and upper bound and check for convergence
-                Lower_Bound = self.main_model.objVal
-                optimal_p_Da = self.main_model.variables.generator_production.x
-                Upper_bound = gp.quicksum(
-                    (self.data.da_price[t] - self.data.generator_capacity) * optimal_p_Da + self.data.pi * (self.data.b_price[(t,k)]-self.data.generator_cost)*optimalBalance
+            #Checks whether subproblem was Succesfull
+            if type(dual) != type(False):
+                #each iteration adds a new gamma-constraint (=Bender's cut) based on the subproblem's optimal Balance and the respective dual variable
+                self.constraints_Main.gamma_benders = {
+                    t: self.main_model.addLConstr(
+                        self.data.pi * (self.data.b_price[(t,k)]-self.data.generator_cost) * optimalBalance[t-1] + dual[t-1] * (self.variables_Main.generator_production[t] - p_DA_fixed[t]),
+                        GRB.GREATER_EQUAL,
+                        self.variables_Main.gamma,
+                        name=f'Gamma contraint for benders_{t}_{k}'
+                    )
                     for t in self.data.TIME
-                )
+                }
+                print(I)
+                print(new_gamma)
+                self._build_constraints(self.main_model, 0, 0, new_gamma)
 
-                if (Upper_bound - Lower_Bound) <= epsilon:
-                    break
+                self.main_model.update()
+                self.main_model.optimize()
+
+                if self.main_model.status == GRB.OPTIMAL:
+                    new_gamma = self.variables_Main.gamma.x
+                    #calculating the lower and upper bound and check for convergence
+                    Lower_Bound = self.main_model.objVal
+                    optimal_p_Da = {t:self.variables_Main.generator_production[t].x for t in self.data.TIME}
+                    Upper_Bound = sum(
+                        (self.data.da_price[t-1] - self.data.generator_cost) * optimal_p_Da[t] + self.data.pi * (self.data.b_price[(t,k)]-self.data.generator_cost)*optimalBalance[t-1]
+                        for t in self.data.TIME
+                    )
+
+                    if abs(Upper_Bound - Lower_Bound) <= epsilon:
+                        break
+                    else:
+                        I = I + 1
+                        # self.main_model.reset()
+                        p_DA_fixed = optimal_p_Da
                 else:
-                    I = I + 1
-                    # self.main_model.reset()
-                    p_DA_fixed = optimal_p_Da
+                    if self.main_model.Status == GRB.INFEASIBLE:
+                        self.main_model.computeIIS()
+
+                        # Write IIS to a file
+                        self.main_model.write("model.ilp")
+
+                        print("Main-Problem - Irreducible Inconsistent Subsystem (IIS):")
+                        for constr in self.main_model.getConstrs():
+                            if constr.IISConstr:
+                                print(f"Infeasible constraint: {constr.ConstrName}")
+                    elif self.main_model.Status == GRB.UNBOUNDED:
+                        print("Main-Problem - Unbounded Subsystem (UNBOUNDED):")
+                    elif self.main_model.Status == GRB.SUBOPTIMAL:
+                        print("Found a solution but not the best")
+                    elif self.main_model.Status == GRB.INF_OR_UNBD:
+                        print("Ich versteh die welt nicht mehr")
+                        for constr in self.main_model.getConstrs():
+                            if abs(constr.RHS) > 1e6:  # Example threshold for large RHS
+                                print(f"Constraint {constr.ConstrName} has a large RHS: {constr.RHS}")
+
+
+                print("Jössas")
             else:
-                print("Wir sind aufn sprung")
+                print("Subproblem causes the trouble")
 
         self.main_model.update()
 
@@ -427,13 +471,13 @@ if __name__ == '__main__':
             charging_capacity= 40
         )
     else:
-        num_wind_scenarios = 1
-        num_price_scenarios = 1
+        num_wind_scenarios = 2
+        num_price_scenarios = 2
         SCENARIOS = num_wind_scenarios * num_price_scenarios
         Scenarios = [i for i in range(1, SCENARIOS + 1)]
         Time = [i for i in range(1, 25)]
 
-        scescenario_DA_prices = {}
+        scenario_DA_prices = {}
         scenario_B_prices = {}
         scenario_windProd = {}
         scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
@@ -461,7 +505,7 @@ if __name__ == '__main__':
             soc_init=10,
             charging_capacity=100
         )
-
+    print(input_data.da_price)
     model = StochasticOfferingStrategy(input_data)
     model.run()
     #model.display_results()
