@@ -1,13 +1,11 @@
-\ Model Iterative stochastic offering strategy_copy
+\ Model Main-Problem_copy
 \ LP format - for model browsing. Use MPS format to capture full model detail.
 Maximize
  
 Subject To
- Balancing_power_constraint_1_1: Balancing_discharge_1_1
-   - Balancing_charge_1_1 - Balancing_power_1_1 = 10.02059527553135
- SOC_initial_constraint1_1: - State_of_charge_1_1
-   - 1.111111111111111 Balancing_discharge_1_1 + 0.9 Balancing_charge_1_1
-   = -10
+ Gamma_contraint_0: gamma <= -100
+ Gamma_contraint_for_benders_7_1: 1.932665628697027 DA_production_h_7
+   - gamma <= 61.14651284486796
 Bounds
- Balancing_discharge_1_1 free
+ gamma free
 End
