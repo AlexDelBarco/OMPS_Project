@@ -25,8 +25,8 @@ font = {'family': 'times new roman',
         'size': size_pp,
         }
 
-num_wind_scenarios = 10
-num_price_scenarios = 10
+num_wind_scenarios = 20
+num_price_scenarios = 20
 s = num_wind_scenarios * num_price_scenarios
 SCENARIOS = [i for i in range(1, s + 1)]
 TIME = [i for i in range(1, 25)]
