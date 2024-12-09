@@ -132,7 +132,7 @@ class benders_subproblem:  # Class representing the subproblems for each scenari
         # p_B
         self.variables.p_B = {
             (t, s): m.addVar(
-                lb=0, ub=generator_capacity, name=f'Balancing power_h_{t}_{s}'
+                lb=-1000, ub=generator_capacity, name=f'Balancing power_h_{t}_{s}'
             )
             for t in TIME
             for s in SCENARIOS
@@ -185,24 +185,24 @@ class benders_subproblem:  # Class representing the subproblems for each scenari
             )
             for t in TIME
         }
-        self.constraints.DA_constraint_availability = {
-            t: m.addLConstr(
-                self.variables.p_DA[t],
-                GRB.LESS_EQUAL,
-                self.data.generator_availability[0][(t, k)],
-                name=f'p_DA constraint_availability_max{t}_{k}'
-            )
-            for t in TIME
-        }
-        self.constraints.B_constraint_availability = {
-            t: m.addLConstr(
-                self.variables.p_B[(t, k)],
-                GRB.LESS_EQUAL,
-                self.data.generator_availability[0][(t, k)],
-                name=f'p_B constraint_availability_max{t}_{k}'
-            )
-            for t in TIME
-        }
+        # self.constraints.DA_constraint_availability = {
+        #     t: m.addLConstr(
+        #         self.variables.p_DA[t],
+        #         GRB.LESS_EQUAL,
+        #         self.data.generator_availability[0][(t, k)],
+        #         name=f'p_DA constraint_availability_max{t}_{k}'
+        #     )
+        #     for t in TIME
+        # }
+        # self.constraints.B_constraint_availability = {
+        #     t: m.addLConstr(
+        #         self.variables.p_B[(t, k)],
+        #         GRB.LESS_EQUAL,
+        #         self.data.generator_availability[0][(t, k)],
+        #         name=f'p_B constraint_availability_max{t}_{k}'
+        #     )
+        #     for t in TIME
+        # }
 
         m.update()
 
@@ -283,16 +283,16 @@ class benders_master:  # class of master problem
         # index shortcut
         m = self.model
 
-        self.constraints.generator_availability_max = {
-            (t, s): m.addLConstr(
-                self.variables.generator_production[t],
-                GRB.LESS_EQUAL,
-                scenario_windProd[(t, s)],
-                name=f'Generator_production_availability_max_{t}_{s}'
-            )
-            for t in TIME
-            for s in SCENARIOS
-        }
+        # self.constraints.generator_availability_max = {
+        #     (t, s): m.addLConstr(
+        #         self.variables.generator_production[t],
+        #         GRB.LESS_EQUAL,
+        #         scenario_windProd[(t, s)],
+        #         name=f'Generator_production_availability_max_{t}_{s}'
+        #     )
+        #     for t in TIME
+        #     for s in SCENARIOS
+        # }
         # initialize master problem cuts (empty)
         self.constraints.master_cuts = {}
 
@@ -324,7 +324,7 @@ class benders_master:  # class of master problem
                                 self.variables.generator_production[t] -
                                 self.data.da_fixed_values[self.data.iteration - 1][t]) for t in
                     TIME)) for s in SCENARIOS),
-            name='new (uni)-cut at iteration {0}'.format(self.data.iteration))
+            name='new cut at iteration {0}'.format(self.data.iteration))
 
         m.update()
 

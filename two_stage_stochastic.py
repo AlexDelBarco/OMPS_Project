@@ -104,7 +104,7 @@ class StochasticOfferingStrategy():
 
         self.variables.balancing_power = {
             (t, k): self.model.addVar(
-                lb=0, ub=self.data.generator_capacity, name=f'Balancing power_{t}_{k}'
+                lb=-1000, ub=self.data.generator_capacity, name=f'Balancing power_{t}_{k}'
             )
             for t in self.data.TIME
             for k in self.data.SCENARIOS
