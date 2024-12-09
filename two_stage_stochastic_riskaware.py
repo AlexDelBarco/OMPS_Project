@@ -179,6 +179,11 @@ class StochasticOfferingStrategy():
             for k in self.data.SCENARIOS
         }
 
+        self.constraints.DA_constraint_availability = {
+            t: self.model.addLConstr(self.variables.generator_production[t], GRB.LESS_EQUAL,
+                self.data.generator_availability[(t, k)], name=f'p_DA constraint_availability_max{t}_{k}') for t in Time
+            for k in self.data.SCENARIOS}
+
         if self.risk_averse:
             self.constraints.eta_constraint = {
                 (t,k):self.model.addLConstr(
