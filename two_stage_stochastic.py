@@ -2,6 +2,7 @@ import gurobipy as gp
 from gurobipy import GRB
 from scenario_generation_function import generate_scenarios
 import matplotlib.pyplot as plt
+import timeit
 
 
 class Expando(object):
@@ -408,12 +409,9 @@ if __name__ == '__main__':
         scenario_B_prices = {}
         scenario_windProd = {}
         scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
-        scenario_DA_prices = [
-            51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
-            112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
-            155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
-        ]
 
+        for s in range(1, SCENARIOS + 1):
+            print(scenario_windProd[(12, s)])
         #Equal probability of each scenario 1/100
         pi = 1/SCENARIOS
 
@@ -433,17 +431,21 @@ if __name__ == '__main__':
             charging_capacity=100
         )
 
+    start = timeit.timeit()  # define start time
     model = StochasticOfferingStrategy(input_data)
     model.run()
+    end = timeit.timeit()
+    print('Start-Time: ', start)
+    print('End-Time: ', end)
     model.display_results()
 
     model.get_extreme_scenarios(scenario_windProd)
     model.plot_results(scenario_num=19)
-    #model.plot_results(scenario_num=18)
+    model.plot_results(scenario_num=18)
     model.plot_results(scenario_num=13)
 
 
 
-    # model_PI = StochasticOfferingStrategy(input_data)
-    # model_PI.run()
-    # model_PI.display_results()
+    model_PI = StochasticOfferingStrategy(input_data)
+    model_PI.run()
+    model_PI.display_results()
