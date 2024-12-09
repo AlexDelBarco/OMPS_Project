@@ -8,7 +8,6 @@ import re
 
 np.random.seed(1)
 
-
 prices_data_DA = [
     51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
     112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
@@ -22,7 +21,6 @@ prices_data_B = [
 
 ]
 
-
 #TODO increase in necessary
 num_price_scenarios = 10
 num_scenarios_wind = 10
@@ -35,8 +33,6 @@ num_scenarios_total = num_price_scenarios * num_scenarios_wind
 SCENARIOS_TOT = [k for k in range(1, num_scenarios_total + 1)]
 
 SCENARIOS = np.sort(np.random.choice(np.arange(1, num_scenarios_total + 1), size=num_scenarios_total, replace=False))
-
-
 
 ## Generate price scenarios using normal distribution
 price_scenarios_DA = {}

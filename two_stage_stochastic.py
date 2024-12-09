@@ -22,7 +22,7 @@ class InputData:
             generator_availability: dict[tuple[int, int], float],
             b_price: dict[tuple[int, int], float],
             da_price: list,
-            pi: dict[int, float],
+            pi: float,
             rho_charge: float,
             rho_discharge: float,
             soc_max: float,
@@ -73,7 +73,6 @@ class StochasticOfferingStrategy():
             )
             for t in self.data.TIME
         }
-
 
         self.variables.soc = {
             (t, k): self.model.addVar(
@@ -190,7 +189,6 @@ class StochasticOfferingStrategy():
         self._build_objective_function()
         self.model.update()
 
-    #Save results is not changed yet
     def _save_results(self):
         self.results.objective_value = self.model.ObjVal
         self.results.generator_production = [
@@ -220,20 +218,18 @@ class StochasticOfferingStrategy():
             for v in self.model.getVars():
                 print(f"Variable {v.varName}: LB={v.lb}, UB={v.ub}")
             for c in self.model.getConstrs():
-                print(f"Constraint {c.ConstrName}: Slack={c.slack}")
+                print(f"Constraint {c.ConstrName}")
             raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
-
 
     def display_results(self):
         print()
         print("-------------------   RESULTS  -------------------")
         print("Expected day-ahead profit:")
         print(self.results.objective_value)
-        print("Optimal generator offer:")
+        print("Optimal DA bid:")
         print(self.results.generator_production)
         print("--------------------------------------------------")
         print("Optimal balancing offer:")
-        #print(self.results.balancing_charge)
         for k in self.data.SCENARIOS:
             print(f"Scenario {k}: ", end="")
             for t in self.data.TIME:
@@ -241,7 +237,6 @@ class StochasticOfferingStrategy():
             print()
         print("--------------------------------------------------")
         print("Optimal balancing charging power:")
-        #print(self.results.balance_charge)
         for k in self.data.SCENARIOS:
             print(f"Scenario {k}: ", end="")
             for t in self.data.TIME:
@@ -249,7 +244,6 @@ class StochasticOfferingStrategy():
             print()
         print("--------------------------------------------------")
         print("Optimal balancing discharging power:")
-        #print(self.results.balancing_discharge)
         for k in self.data.SCENARIOS:
             print(f"Scenario {k}: ", end="")
             for t in self.data.TIME:
@@ -279,7 +273,6 @@ class StochasticOfferingStrategy():
         print(f"Scenario with minimum wind production: {min_scenario} (Total: {min_wind_production})")
         print(f"Scenario with maximum wind production: {max_scenario} (Total: {max_wind_production})")
         print(f"Scenario with median wind production: {median_scenario} (Total: {median_wind_production})")
-
 
     def plot_results(self, scenario_num):
         """
@@ -364,7 +357,7 @@ if __name__ == '__main__':
     Scenarios = [i for i in range(1, SCENARIOS + 1)]
     Time = [i for i in range(1, 25)]
 
-    scescenario_DA_prices = {}
+    scenario_DA_prices = {}
     scenario_B_prices = {}
     scenario_windProd = {}
     scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
@@ -386,8 +379,8 @@ if __name__ == '__main__':
         da_price=scenario_DA_prices,
         b_price=scenario_B_prices,
         pi=pi,
-        rho_charge=0.9,  # TODO what were the rho values before??
-        rho_discharge=0.9,
+        rho_charge=0.8332,
+        rho_discharge=0.8332,
         soc_max=120,
         soc_init=10,
         charging_capacity=100
@@ -398,14 +391,9 @@ if __name__ == '__main__':
     model.display_results()
 
     model.get_extreme_scenarios(scenario_windProd)
-    model.plot_results(scenario_num=19)
-    model.plot_results(scenario_num=1)
+    # model.plot_results(scenario_num=19)
+    # model.plot_results(scenario_num=1)
 
     model_PI = StochasticOfferingStrategy(input_data)
     model_PI.run()
     model_PI.display_results()
-
-
-    # model_PI = StochasticOfferingStrategy(input_data)
-    # model_PI.run()
-    # model_PI.display_results()
