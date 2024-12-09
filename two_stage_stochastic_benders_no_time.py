@@ -175,7 +175,7 @@ class benders_master:
 
     def _update_master_cut(self):
         self.constraints.master_cuts[self.data.iteration] = self.model.addConstr(
-            self.variables.gamma >= sum(
+            self.variables.gamma <= sum(
                 pi * (
                     self.data.subproblem_objectives[self.data.iteration - 1][s] +
                     self.data.da_dual[self.data.iteration - 1][s] *
@@ -245,8 +245,12 @@ class benders_master:
 # Solve and print results
 start = timeit.timeit()
 
-DA_model = benders_master(epsilon=0.1, max_iters=100)
+DA_model = benders_master(epsilon=0.1, max_iters=1000)
 DA_model._benders_iterate()
+print("Iterations:")
+print(DA_model.data.iteration)
+print(DA_model.data.upper_bounds[DA_model.data.iteration])
+print(DA_model.data.lower_bounds[DA_model.data.iteration])
 
 end = timeit.timeit()
 

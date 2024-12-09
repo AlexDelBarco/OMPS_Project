@@ -423,7 +423,7 @@ def run_riskaware_optimization(input_data, alpha_values, beta_values):
 
 
 if __name__ == '__main__':
-    testdata = True
+    testdata = False
     if(testdata):
         generator_availability_values = {
             (1, 1): 33, (1, 2): 30, (1, 3): 27,
@@ -472,8 +472,8 @@ if __name__ == '__main__':
             charging_capacity= 40
         )
     else:
-        num_wind_scenarios = 3
-        num_price_scenarios = 3
+        num_wind_scenarios = 20
+        num_price_scenarios = 20
         SCENARIOS = num_wind_scenarios * num_price_scenarios
         Scenarios = [i for i in range(1, SCENARIOS + 1)]
         Time = [i for i in range(1, 25)]
@@ -483,12 +483,9 @@ if __name__ == '__main__':
         scenario_windProd = {}
         scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
 
+        for s in range(1,SCENARIOS+1):
+            print(scenario_windProd[(12,s)])
 
-        scenario_DA_prices = [
-            51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
-            112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
-            155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
-        ]
 
         #Equal probability of each scenario 1/100
         pi = 1/SCENARIOS
@@ -502,8 +499,8 @@ if __name__ == '__main__':
             da_price=scenario_DA_prices,
             b_price=scenario_B_prices,
             pi = pi,
-            rho_charge=0.9,  # TODO what were the rho values before??
-            rho_discharge=0.9,
+            rho_charge=0.8332,  # TODO what were the rho values before??
+            rho_discharge=0.8332,
             soc_max=120,
             soc_init=10,
             charging_capacity=100
@@ -512,7 +509,7 @@ if __name__ == '__main__':
     model = StochasticOfferingStrategy(input_data, True,0.95,1)
     model.run()
     model.display_results()
-    #model.plot_results()
+    model.plot_results()
 
     # Example usage:
     alpha_values = [0.95]
@@ -523,6 +520,6 @@ if __name__ == '__main__':
     for result in results:
         print(f"Alpha: {result['alpha']}, Beta: {result['beta']}, Objective Value: {result['objective_value']}")
 
-    # model_PI = StochasticOfferingStrategy(input_data)
-    # model_PI.run()
-    # model_PI.display_results()
+    model_PI = StochasticOfferingStrategy(input_data)
+    model_PI.run()
+    model_PI.display_results()

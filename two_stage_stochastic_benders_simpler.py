@@ -25,48 +25,8 @@ font = {'family': 'times new roman',
         'size': size_pp,
         }
 
-# num_wind_scenarios = 2
-# num_price_scenarios = 2
-# s = num_wind_scenarios * num_price_scenarios
-# SCENARIOS = [i for i in range(1, s + 1)]
-# # TIME = [i for i in range(1, 25)]
-# TIME = [i for i in range(1,6)]
-# generator_capacity = 48
-# scenario_DA_prices = {}
-# scenario_B_prices = {}
-# scenario_windProd = {}
-# scenario_windProd = {
-#             (1, 1): 33, (1, 2): 30, (1, 3): 27,
-#             (1, 4): 21, (1, 5): 20,
-#             (2, 1): 20, (2, 2): 21, (2, 3): 31,
-#             (2, 4): 17, (2, 5): 10,
-#             (3, 1): 33, (3, 2): 27, (3, 3): 50,
-#             (3, 4): 19, (3, 5): 80,
-#             (4, 1): 21, (4, 2): 36, (4, 3): 50,
-#             (4, 4): 50, (4, 5): 50,
-#             (5, 1): 25, (5, 2): 39, (5, 3): 50,
-#             (5, 4): 50, (5, 5): 50
-# }
-#
-# scenario_B_prices = {
-#             (1, 1): 88.31, (1, 2): 136.25, (1, 3): 85.61, (1, 4): 137.09, (1, 5): 146.05,
-#             (2, 1): 134.67, (2, 2): 96.76, (2, 3): 139.7, (2, 4): 96.58, (2, 5): 117.66,
-#             (3, 1): 112.06, (3, 2): 86.55, (3, 3): 79.03, (3, 4): 115.01, (3, 5): 115.76,
-#             (4, 1): 85.12, (4, 2): 122.11, (4, 3): 83.61, (4, 4): 80.92, (4, 5): 90.75,
-#             (5, 1): 111.76, (5, 2): 141.14, (5, 3): 135.55, (5, 4): 75.47, (5, 5): 118.62
-# }
-# # scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
-# scenario_DA_prices = [
-#     51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
-#     112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
-#     155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
-# ]
-#
-# # Equal probability of each scenario 1/100
-# pi = 1 / s
-
-num_wind_scenarios = 2
-num_price_scenarios = 2
+num_wind_scenarios = 20
+num_price_scenarios = 20
 s = num_wind_scenarios * num_price_scenarios
 SCENARIOS = [i for i in range(1, s + 1)]
 TIME = [i for i in range(1, 25)]
@@ -268,7 +228,6 @@ class benders_master:  # class of master problem
         m = self.model
 
         # Set the objective function for the master problem
-
         master_objective = gb.quicksum(
             (scenario_DA_prices[t-1] - generator_capacity) * self.variables.generator_production[t]
             + self.variables.gamma
@@ -315,16 +274,16 @@ class benders_master:  # class of master problem
         # index shortcut
         m = self.model
 
-        self.constraints.master_cuts[self.data.iteration] = m.addConstr(
+        self.constraints.master_cuts[self.data.iteration] = m.addLConstr(
             self.variables.gamma,
-            gb.GRB.GREATER_EQUAL,
+            gb.GRB.LESS_EQUAL,
             gb.quicksum(pi * (
                         self.data.subproblem_objectives[self.data.iteration - 1][s] + gb.quicksum(
                     self.data.da_dual[self.data.iteration - 1][t, s] * (
                                 self.variables.generator_production[t] -
                                 self.data.da_fixed_values[self.data.iteration - 1][t]) for t in
                     TIME)) for s in SCENARIOS),
-            name='new (uni)-cut at iteration {0}'.format(self.data.iteration))
+            name='new cut at iteration {0}'.format(self.data.iteration))
 
         m.update()
 
@@ -410,8 +369,12 @@ class benders_master:  # class of master problem
 
 start = timeit.timeit()  # define start time
 
-DA_model = benders_master(epsilon=0.1, max_iters=100)
+DA_model = benders_master(epsilon=0.001, max_iters=100)
 DA_model._benders_iterate()
+print("Number of iterations done in total:")
+print(DA_model.data.upper_bounds[DA_model.data.iteration])
+print(DA_model.data.lower_bounds[DA_model.data.iteration])
+print(DA_model.data.iteration)
 
 end = timeit.timeit()  # define end time
 

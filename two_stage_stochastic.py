@@ -405,4 +405,7 @@ if __name__ == '__main__':
     model_PI.run()
     model_PI.display_results()
 
-print('End')
+
+    # model_PI = StochasticOfferingStrategy(input_data)
+    # model_PI.run()
+    # model_PI.display_results()

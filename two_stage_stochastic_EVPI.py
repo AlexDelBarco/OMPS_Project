@@ -405,8 +405,8 @@ def run_optimization_for_different_scenarios(max_scenarios):
             da_price=scenario_DA_prices,
             b_price=scenario_B_prices,
             pi=pi,
-            rho_charge=0.9,
-            rho_discharge=0.9,
+            rho_charge=0.8332,
+            rho_discharge=0.8332,
             soc_max=120,
             soc_init=10,
             charging_capacity=100
@@ -488,8 +488,8 @@ if __name__ == '__main__':
             charging_capacity= 40
         )
     else:
-        num_wind_scenarios = 7
-        num_price_scenarios = 7
+        num_wind_scenarios = 20
+        num_price_scenarios = 20
         SCENARIOS = num_wind_scenarios * num_price_scenarios
         Scenarios = [i for i in range(1, SCENARIOS + 1)]
         Time = [i for i in range(1, 25)]
@@ -498,11 +498,9 @@ if __name__ == '__main__':
         scenario_B_prices = {}
         scenario_windProd = {}
         scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
-        scenario_DA_prices = [
-            51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
-            112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
-            155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
-        ]
+
+        for s in range(1,SCENARIOS+1):
+            print(scenario_windProd[(12,s)])
 
         #Equal probability of each scenario 1/100
         pi = 1/SCENARIOS
