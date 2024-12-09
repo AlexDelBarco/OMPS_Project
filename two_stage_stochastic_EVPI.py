@@ -453,8 +453,8 @@ def run_optimization_for_different_scenarios(max_scenarios):
     print("Simulation Complete!")
 
 if __name__ == '__main__':
-    num_wind_scenarios = 2
-    num_price_scenarios = 2
+    num_wind_scenarios = 20
+    num_price_scenarios = 20
     SCENARIOS = num_wind_scenarios * num_price_scenarios
     Scenarios = [i for i in range(1, SCENARIOS + 1)]
     Time = [i for i in range(1, 25)]

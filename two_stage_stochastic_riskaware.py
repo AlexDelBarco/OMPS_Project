@@ -179,6 +179,11 @@ class StochasticOfferingStrategy():
             for k in self.data.SCENARIOS
         }
 
+        self.constraints.DA_constraint_availability = {
+            t: self.model.addLConstr(self.variables.generator_production[t], GRB.LESS_EQUAL,
+                self.data.generator_availability[(t, k)], name=f'p_DA constraint_availability_max{t}_{k}') for t in Time
+            for k in self.data.SCENARIOS}
+
         if self.risk_averse:
             self.constraints.eta_constraint = {
                 (t,k):self.model.addLConstr(
@@ -199,7 +204,7 @@ class StochasticOfferingStrategy():
                     (1 - self.beta) * (
                 gp.quicksum(
                     gp.quicksum(
-                        (self.data.da_price[t - 1] - self.data.generator_cost) * self.variables.generator_production[t]
+                        (self.data.da_price[t,k] - self.data.generator_cost) * self.variables.generator_production[t]
                         + self.data.pi * (self.data.b_price[t, k] - self.data.generator_cost) *
                         self.variables.balancing_power[t, k]
                         for t in self.data.TIME
@@ -213,24 +218,6 @@ class StochasticOfferingStrategy():
                         )
                     )
             )
-            # objective = (
-            #     gp.quicksum(
-            #         gp.quicksum(
-            #             (self.data.da_price[(t - 1)] - self.data.generator_cost) * self.variables.generator_production[t] +
-            #             (1 - self.beta) * (self.data.pi * (self.data.b_price[(t, k)] - self.data.generator_cost) * self.variables.balancing_power[(t, k)])
-            #             + self.beta * (self.variables.zeta[(t)] - ((1 / (1 - self.alpha)) * self.data.pi * self.variables.eta[(t, k)]))
-            #         for t in self.data.TIME)
-            #     for k in self.data.SCENARIOS)
-            # )
-
-
-
-
-            DA_Profit = gp.quicksum((self.data.da_price[(t-1)] - self.data.generator_cost) *self.variables.generator_production[t]for t in self.data.TIME)
-
-            BA_Profit = gp.quicksum((self.data.b_price[(t,k)]-self.data.generator_cost) * self.variables.balancing_power[(t,k)] for t in self.data.TIME for k in self.data.SCENARIOS)
-
-            CVaR = gp.quicksum(self.variables.zeta - (1/(1-self.alpha))*self.data.pi * self.variables.eta[(k)] for k in self.data.SCENARIOS)
 
 
 
@@ -330,76 +317,17 @@ class StochasticOfferingStrategy():
             print("Risk-Aware Optimization")
             print("Alpha: "+ str(self.alpha))
             print("Beta: "+ str(self.beta))
-            # print("--------------------------------------------------")
-            # for t in self.data.TIME:
-            #     print(f"CVaR at Time {t}: "+str(self.results.cvar[t]), end="")
-            #     print(f"Zeta VaR: "+str(self.results.zeta[t]))
-            #     print()
-
-    def plot_results(self):
-        """
-        Plots the SOC and other results such as charging/discharging power, DA bid, and balancing power.
-        """
-        time = self.data.TIME
-        scenarios = self.data.SCENARIOS
-
-        # Extract SOC
-        soc = {t: sum(self.results.soc[(t, k)] for k in scenarios) / len(scenarios) for t in time}
-
-        # DA STAGE
-        # Extract charging and discharging power
-        da_bid = {t: self.results.generator_production[t-1] for t in time}
-        da_price = {t: self.data.da_price[t-1] for t in time}
-
-        # Extract balancing bid (averaged over scenarios)
-        #balancing_bid = {t: sum(self.results.balancing_power[(t, k)] for k in scenarios) / len(scenarios) for t in time}
-        balancing_bid = {(t,k): self.results.balancing_power[(t, k)] for t in time for k in scenarios}
-        balancing_charge = {(t,k): self.results.balancing_charge[(t, k)] for t in time for k in scenarios}
-        balancing_discharge = {(t,k): self.results.balancing_discharge[(t, k)] for t in time for k in scenarios}
-        balancing_price = {(t,k): self.data.b_price[(t,k)] for t in time for k in scenarios}
+            print("--------------------------------------------------")
+            for t in self.data.TIME:
+                 print(f"CVaR at Time {t}: "+str(self.results.cvar[t]), end="")
+                 print(f"Zeta VaR: "+str(self.results.zeta[t]))
+                 print()
 
 
-        # Plot SOC
-        plt.figure(figsize=(10, 6))
-        plt.plot(time, [soc[t] for t in time], label="State of Charge (SOC)", color="blue", marker="o")
-        plt.xlabel("Time (t)")
-        plt.ylabel("SOC")
-        plt.title("State of Charge Over Time")
-        plt.grid(True)
-        plt.legend()
-        plt.show()
 
-        # inspected scenario
-        scenario = 1
-        fig, ax1 = plt.subplots(figsize=(10, 6))
 
-        ax1.plot(time, [balancing_bid[t, scenario] for t in time], label=f"Balancing Bid for S{scenario}",
-                 color="green", marker="x")
-        ax1.plot(time, [balancing_charge[t, scenario] for t in time], label=f"Balancing charge S{scenario}",
-                 color="blue", alpha=0.5)
-        ax1.plot(time, [balancing_discharge[t, scenario] for t in time], label=f"Balancing discharge S{scenario}",
-                 color="orange", alpha=0.5)
-        ax1.plot(time, [da_bid[t] for t in time], label="DA Bid", color="green", linestyle="--")
-        ax1.set_xlabel("Time (t)")
-        ax1.set_xticks(time)
-        ax1.set_ylabel("Power (MW)")
-        ax1.set_title("Day-Ahead, Charging/Discharging, and Balancing Power")
-        ax1.grid(True)
 
-        # Create a secondary y-axis for prices
-        ax2 = ax1.twinx()
-        ax2.plot(time, [balancing_price[t, scenario] for t in time], label=f"Balancing Price S{scenario}", color="red",
-                 alpha=0.5)
-        ax2.plot(time, [da_price[t] for t in time], label="DA Price", color="red", linestyle="--", alpha=0.5)
-        ax2.set_ylabel("Price ($)")
 
-        # Add legends for both axes
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1, labels1, loc='upper left')
-        ax2.legend(lines2, labels2, loc='upper right')
-
-        plt.show()
 
 def run_riskaware_optimization(input_data, alpha_values, beta_values):
     results = []
@@ -411,16 +339,39 @@ def run_riskaware_optimization(input_data, alpha_values, beta_values):
                 'alpha': alpha,
                 'beta': beta,
                 'objective_value': model.results.objective_value,
-                'generator_production': model.results.generator_production,
-                'balancing_power': model.results.balancing_power,
-                'balancing_charge': model.results.balancing_charge,
-                'balancing_discharge': model.results.balancing_discharge,
-                'soc': model.results.soc,
-                'zeta': model.results.zeta if model.risk_averse else None,
-                'cvar': model.results.cvar if model.risk_averse else None
+                #'generator_production': model.results.generator_production,
+                #'balancing_power': model.results.balancing_power,
+                #'balancing_charge': model.results.balancing_charge,
+                #'balancing_discharge': model.results.balancing_discharge,
+                #'soc': model.results.soc,
+                #'zeta': model.results.zeta if model.risk_averse else None,
+                #'cvar': model.results.cvar if model.risk_averse else None
             })
     return results
 
+
+def plot_results(results):
+    """
+    Plots the SOC and other results such as charging/discharging power, DA bid, and balancing power.
+    """
+
+    # Extract beta and objective values
+    beta_values = [entry['beta'] for entry in results]
+    objective_values = [entry['objective_value'] for entry in results]
+
+    # Create the plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(beta_values, objective_values, marker='o', label='Objective Value')
+    plt.title(r'Expected Profit($\beta$)', fontsize=14)
+    plt.xlabel(r'$\beta$', fontsize=12)
+    plt.ylabel('Objective Value', fontsize=12)
+    plt.legend(fontsize=10)
+    plt.grid(True)
+    plt.show()
+
+
+    # Extract SOC
+    print(results)
 
 if __name__ == '__main__':
     testdata = False
@@ -478,14 +429,10 @@ if __name__ == '__main__':
         Scenarios = [i for i in range(1, SCENARIOS + 1)]
         Time = [i for i in range(1, 25)]
 
-        scescenario_DA_prices = {}
+        scenario_DA_prices = {}
         scenario_B_prices = {}
         scenario_windProd = {}
         scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
-
-        for s in range(1,SCENARIOS+1):
-            print(scenario_windProd[(12,s)])
-
 
         #Equal probability of each scenario 1/100
         pi = 1/SCENARIOS
@@ -499,27 +446,20 @@ if __name__ == '__main__':
             da_price=scenario_DA_prices,
             b_price=scenario_B_prices,
             pi = pi,
-            rho_charge=0.8332,  # TODO what were the rho values before??
+            rho_charge=0.8332,  # see source pdf table 3
             rho_discharge=0.8332,
             soc_max=120,
             soc_init=10,
             charging_capacity=100
         )
 
-    model = StochasticOfferingStrategy(input_data, True,0.95,1)
-    model.run()
-    model.display_results()
-    model.plot_results()
 
-    # Example usage:
+    # Compute expected profits for a given alpha for beta 0-0.95:
     alpha_values = [0.95]
-    beta_values = [0, 0.1, 0.2]
-    results = run_riskaware_optimization(input_data, alpha_values, beta_values)
+    beta_values = np.arange(0, 0.85, 0.05)
+    #beta_values = [0.1]
+    results = [{'alpha': 0.95, 'beta': 0.0, 'objective_value': 26856972.972235534}, {'alpha': 0.95, 'beta': 0.05, 'objective_value': 25514124.323623654}, {'alpha': 0.95, 'beta': 0.1, 'objective_value': 24171275.675011937}, {'alpha': 0.95, 'beta': 0.15000000000000002, 'objective_value': 22828427.026400078}, {'alpha': 0.95, 'beta': 0.2, 'objective_value': 21485578.377788313}, {'alpha': 0.95, 'beta': 0.25, 'objective_value': 20142729.729176514}, {'alpha': 0.95, 'beta': 0.30000000000000004, 'objective_value': 18799881.080564745}, {'alpha': 0.95, 'beta': 0.35000000000000003, 'objective_value': 17457032.43195304}, {'alpha': 0.95, 'beta': 0.4, 'objective_value': 16114183.783341162}, {'alpha': 0.95, 'beta': 0.45, 'objective_value': 14771335.134729456}, {'alpha': 0.95, 'beta': 0.5, 'objective_value': 13428486.486117767}, {'alpha': 0.95, 'beta': 0.55, 'objective_value': 12085637.837505968}, {'alpha': 0.95, 'beta': 0.6000000000000001, 'objective_value': 10742789.188894156}, {'alpha': 0.95, 'beta': 0.65, 'objective_value': 9399940.54028237}, {'alpha': 0.95, 'beta': 0.7000000000000001, 'objective_value': 8057091.891670579}, {'alpha': 0.95, 'beta': 0.75, 'objective_value': 6714243.243058884}, {'alpha': 0.95, 'beta': 0.8, 'objective_value': 5371394.594447078}]
 
-    # Display results
-    for result in results:
-        print(f"Alpha: {result['alpha']}, Beta: {result['beta']}, Objective Value: {result['objective_value']}")
 
-    model_PI = StochasticOfferingStrategy(input_data)
-    model_PI.run()
-    model_PI.display_results()
+    #results = run_riskaware_optimization(input_data, alpha_values, beta_values)
+    plot_results(results)
