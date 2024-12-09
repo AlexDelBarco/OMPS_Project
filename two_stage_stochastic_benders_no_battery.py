@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Oct 29 20:29:44 2023
-
-@author: lesiamitridati
-"""
-
 import gurobipy as gb
 from gurobipy import GRB
 import pandas as pd
@@ -13,18 +5,9 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import seaborn as sb
-import timeit
 from scenario_generation_function import generate_scenarios
 
-# Set plot parameters
-sb.set_style('ticks')
-size_pp = 15
-font = {'family': 'times new roman',
-        'color': 'black',
-        'weight': 'normal',
-        'size': size_pp,
-        }
-
+# Set global variables
 num_wind_scenarios = 20
 num_price_scenarios = 20
 s = num_wind_scenarios * num_price_scenarios
@@ -44,9 +27,6 @@ scenario_DA_prices = [
 
 # Equal probability of each scenario 1/100
 pi = 1 / s
-
-
-# %%
 
 
 class expando(object):
@@ -97,6 +77,7 @@ class benders_subproblem:  # Class representing the subproblems for each scenari
             for t in TIME
             for s in SCENARIOS
         }
+
         # p_DA
         self.variables.p_DA = {
             t: m.addVar(
@@ -112,10 +93,12 @@ class benders_subproblem:  # Class representing the subproblems for each scenari
         # index shortcut
         m = self.model
         k = self.data.scenario
+
         subObjectivefunction = gb.quicksum(
             self.data.pi * (self.data.b_price[0][(t, k)] - self.data.generator_cost[0]) * self.variables.p_B[(t, k)]
             for t in TIME
         )
+
         m.setObjective(subObjectivefunction, GRB.MAXIMIZE)
 
         m.update()
@@ -145,6 +128,7 @@ class benders_subproblem:  # Class representing the subproblems for each scenari
             )
             for t in TIME
         }
+
         self.constraints.DA_constraint_availability = {
             t: m.addLConstr(
                 self.variables.p_DA[t],
@@ -154,6 +138,7 @@ class benders_subproblem:  # Class representing the subproblems for each scenari
             )
             for t in TIME
         }
+
         self.constraints.B_constraint_availability = {
             t: m.addLConstr(
                 self.variables.p_B[(t, k)],
@@ -166,7 +151,7 @@ class benders_subproblem:  # Class representing the subproblems for each scenari
 
         m.update()
 
-    def _update_complicating_variables(self):  # function that updates the value of the complicating variables in the right-hand-side of self.constraints.fix_generator_dispatch
+    def _update_complicating_variables(self):  # function that updates the value of the complicating variables in the right-hand-side
 
         # index shortcut
         m = self.model
@@ -177,7 +162,7 @@ class benders_subproblem:  # Class representing the subproblems for each scenari
         m.update()
 
 
-# %%     define class of master problem taking as inputs the benders_type: uni-cut or multi-cut, epsilon: convergence criteria parameter, and max_iters: maximum number of terations
+#  define class of master problem taking as inputs epsilon: convergence criteria parameter, and max_iters: maximum number of terations
 
 class benders_master:  # class of master problem
 
@@ -218,6 +203,7 @@ class benders_master:  # class of master problem
             )
             for t in TIME
         }
+
         self.variables.gamma = m.addVar(lb=-1000, ub=1000, name="gamma")
 
         m.update()
@@ -252,6 +238,7 @@ class benders_master:  # class of master problem
             for t in TIME
             for s in SCENARIOS
         }
+
         # initialize master problem cuts (empty)
         self.constraints.master_cuts = {}
 
@@ -270,7 +257,7 @@ class benders_master:  # class of master problem
             pi=pi)
             for s in SCENARIOS}
 
-    def _update_master_cut(self):  # fucntion tat adds cuts to master problem
+    def _update_master_cut(self):  # fucntion that adds cuts to master problem
         # index shortcut
         m = self.model
 
@@ -287,8 +274,7 @@ class benders_master:  # class of master problem
 
         m.update()
 
-    def _save_master_data(
-            self):  # function that saves results of master problem optimization at each iteration (complicating variables, objective value, lower bound value)
+    def _save_master_data(self):  # function that saves results of master problem optimization at each iteration (complicating variables, objective value, lower bound value)
 
         # index shortcut
         m = self.model
@@ -317,6 +303,7 @@ class benders_master:  # class of master problem
             print(f"Subproblem {s} status: {self.subproblem[s].model.Status}")
             self.subproblem[s].model.computeIIS()
             self.subproblem[s].model.write("infeasible_model.ilp")
+
         # save sensitivities (for each complicating variables in each subproblem)
         self.data.da_dual[self.data.iteration] = {
             (t, s): self.subproblem[s].constraints.DA_constraint[t].Pi for t in TIME for s in SCENARIOS}
@@ -364,30 +351,8 @@ class benders_master:  # class of master problem
                  self.data.iteration < self.data.max_iters)):
             self._do_benders_step()
 
-
-# %% solve and print results for uni-cut
-
-start = timeit.timeit()  # define start time
-
+# solve and print results
 DA_model = benders_master(epsilon=0.001, max_iters=100)
 DA_model._benders_iterate()
-print("Number of iterations done in total:")
-print(DA_model.data.upper_bounds[DA_model.data.iteration])
-print(DA_model.data.lower_bounds[DA_model.data.iteration])
-print(DA_model.data.iteration)
 
-end = timeit.timeit()  # define end time
-
-print('uni-cut solving time', end - start)  # print solving time
-
-print('uni-cut optimal cost',
-      DA_model.data.upper_bounds[DA_model.data.iteration])  # print optimal cost (last upper-bound)
-
-f, ax = plt.subplots(figsize=(10, 10))  # print upper and lower bounds evolution at each iteration
-ax.plot(range(1, DA_model.data.iteration), [DA_model.data.upper_bounds[it] for it in range(1, DA_model.data.iteration)],
-        label='upper-bound', linewidth=2, marker='o', color='red')  # upper bounds at each iteration
-ax.plot(range(1, DA_model.data.iteration), [DA_model.data.lower_bounds[it] for it in range(1, DA_model.data.iteration)],
-        label='lower-bound', linewidth=2, marker='o', color='blue')  # lower bounds at each iteration
-ax.set_ylabel('Bounds (DKK)', fontsize=size_pp + 5)
-ax.set_xlabel('Iterations', fontsize=size_pp + 5)
-ax.legend(bbox_to_anchor=(0.75, 1), bbox_transform=plt.gcf().transFigure, ncol=2, fontsize=size_pp + 5)
+print('Optimal cost ', DA_model.data.upper_bounds[DA_model.data.iteration])  # print optimal cost (last upper-bound)

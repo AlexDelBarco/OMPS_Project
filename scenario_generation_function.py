@@ -71,6 +71,3 @@ def generate_scenarios(num_price_scenarios, num_wind_scenarios):
             scenarios_data_WindProd[(t, k)] = wind_power_scenarios[(t, k_w)]
 
     return scenarios_data_DAprices, scenarios_data_Bprices, scenarios_data_WindProd
-
-
-scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(10, 10)
