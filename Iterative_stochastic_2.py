@@ -280,7 +280,6 @@ for h in range(1,25):
                 raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
 
 
-
     model = StochasticOfferingStrategy(input_data)
     model.run()
 
@@ -293,5 +292,98 @@ for h in range(1,25):
     soc_value = sum(model.results.soc[(h, k)] for k in model.data.SCENARIOS)
     SOC_st.append(soc_value/SCENARIOS)
     #model.display_results()
+
+# Initialize the dictionary to store the mean results
+mean_results = {
+    "soc": {},
+    "balancing_power": {},
+    "balancing_charge": {},
+    "balancing_discharge": {},
+    "objective_value": {},
+    "scenario_DA_prices": {},
+    "da_production": {},
+    "scenario_B_price_mean": {}
+}
+
+# Iterate over each hour in the results dictionary
+for h in range(1, 25):
+    scenarios = list(results["soc"][h].keys())  # Get the list of scenarios for the hour
+    num_scenarios = len(scenarios)
+
+    # Compute the mean for each metric
+    mean_results["soc"][h] = sum(results["soc"][h][k] for k in scenarios) / num_scenarios
+    mean_results["balancing_power"][h] = sum(results["balancing_power"][h][k] for k in scenarios) / num_scenarios
+    mean_results["balancing_charge"][h] = sum(results["balancing_charge"][h][k] for k in scenarios) / num_scenarios
+    mean_results["balancing_discharge"][h] = sum(results["balancing_discharge"][h][k] for k in scenarios) / num_scenarios
+    mean_results["objective_value"][h] = results["objective_value"][h]  # Already aggregated per hour
+
+    # Add scenario_DA_prices and da_production (no mean calculation needed)
+    mean_results["scenario_DA_prices"][h] = scenario_DA_prices[h - 1]
+    mean_results["da_production"][h] = da_production[h - 1]
+
+    # Calculate the mean of scenario_B_prices across all scenarios
+    mean_results["scenario_B_price_mean"][h] = sum(results["balancing_power"][h][k] for k in scenarios) / num_scenarios
+
+# Print the mean results
+print(mean_results)
+
+
+
+print('Plts')
+
+#Plot
+time = [i for i in range(1, 25)]
+
+# Plot SOC
+fig, axs = plt.subplots(2, 1, figsize=(12, 12))
+
+axs[0].plot(time, [mean_results['soc'][t] for t in range(1, 25)], label="State of Charge (SOC)", color="blue", marker="o")
+axs[0].set_xlabel("Time [hour]")
+axs[0].set_ylabel("SOC")
+axs[0].set_title(f"Mean SOC for all scenarios")
+axs[0].grid(True)
+axs[0].legend()
+
+print('here')
+
+axs[1].bar(time, [mean_results['balancing_charge'][t] for t in range(1, 25)], label=f"Battery charge",
+           color="blue", alpha=0.5)
+axs[1].bar(time, [mean_results['balancing_discharge'][t] for t in range(1, 25)], label=f"Battery discharge",
+           color="orange", alpha=0.5)
+axs[1].plot(time, [mean_results['balancing_power'][t] for t in range(1, 25)], label=f"Balancing Bid for",
+            color="green", marker="x")
+axs[1].plot(time, [da_production[t] for t in range(1, 25)], label="DA Bid", color="green", linestyle="--")
+axs[1].set_xlabel("Time (t)")
+axs[1].set_xticks(time)
+axs[1].set_ylabel("Power (MW)")
+axs[1].set_title(f"Power  and Prices for S{scenario}")
+axs[1].grid(True)
+axs[1].legend()
+
+# Create a secondary y-axis for prices
+ax2 = axs[1].twinx()
+ax2.plot(time, [mean_results['scenario_B_price_mean'][t] for t in time], label=f"Balancing Price", color="red",
+         alpha=0.5)
+ax2.plot(time, [mean_results['scenario_DA_prices'][t] for t in time], label="DA Price", color="red", linestyle="--", alpha=0.5)
+
+# the next few lines are necessary for aligning the price and power axis
+ylim = max(axs[1].get_ylim())
+negative_percentage = ((min(mean_results['balancing_charge'].values()) / ylim))
+negative_percentage = (min(axs[1].get_ylim()) / ylim)
+ax2.set_ylim((max(ax2.get_ylim()) * negative_percentage), max(ax2.get_ylim()))  # Set y-axis limits for prices
+ax2.set_ylabel("Price ($)")
+
+lines1, labels1 = axs[1].get_legend_handles_labels()
+lines2, labels2 = ax2.get_legend_handles_labels()
+axs[1].legend(lines1, labels1, loc='upper left')
+ax2.legend(lines2, labels2, loc='upper right')
+# axs[1].legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+# plt.savefig(f'figure/s1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
+plt.tight_layout()
+plt.show()
+
+
+# Print the mean results
+print(mean_results)
 
 print('End')

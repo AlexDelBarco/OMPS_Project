@@ -311,9 +311,9 @@ class StochasticOfferingStrategy():
         axs[0].legend()
 
 
-        axs[1].bar(time, [balancing_charge[t, scenario] for t in time], label=f"Balancing charge S{scenario}",
+        axs[1].bar(time, [balancing_charge[t, scenario] for t in time], label=f"Battery charge S{scenario}",
                    color="blue", alpha=0.5)
-        axs[1].bar(time, [balancing_discharge[t, scenario] for t in time], label=f"Balancing discharge S{scenario}",
+        axs[1].bar(time, [balancing_discharge[t, scenario] for t in time], label=f"Battery discharge S{scenario}",
                    color="orange", alpha=0.5)
         axs[1].plot(time, [balancing_bid[t, scenario] for t in time], label=f"Balancing Bid for S{scenario}",
                     color="green", marker="x")
@@ -392,8 +392,10 @@ if __name__ == '__main__':
 
     model.get_extreme_scenarios(scenario_windProd)
     # model.plot_results(scenario_num=19)
-    # model.plot_results(scenario_num=1)
+    model.plot_results(scenario_num=1)
 
     model_PI = StochasticOfferingStrategy(input_data)
     model_PI.run()
     model_PI.display_results()
+
+print('End')
