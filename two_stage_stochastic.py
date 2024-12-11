@@ -212,8 +212,28 @@ class StochasticOfferingStrategy():
                 print(f"Constraint {c.ConstrName}: Slack={c.slack}")
             raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
 
+    def calculate_profits(self, scenario_num = None):
+        da_profit = sum(
+            (self.data.da_price[t - 1] - self.data.generator_cost) * self.results.generator_production[t - 1]
+            for t in self.data.TIME
+        )
+        if scenario_num:
+            balancing_profit = sum(
+                self.data.pi * (self.data.b_price[t, scenario_num] - self.data.generator_cost) * self.results.balancing_power[(t, scenario_num)]
+                for t in self.data.TIME
+            )
+        else:
+            balancing_profit = sum(
+                self.data.pi * (self.data.b_price[t, k] - self.data.generator_cost) * self.results.balancing_power[(t, k)]
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
+            )
 
-    def display_results(self):
+        return da_profit, balancing_profit
+
+    def display_results(self,scenario_num = None):
+        da_profit, balancing_profit = self.calculate_profits(scenario_num)
+
         print()
         print("-------------------   RESULTS  -------------------")
         print("Expected day-ahead profit:")
@@ -221,30 +241,38 @@ class StochasticOfferingStrategy():
         print("Optimal generator offer:")
         print(self.results.generator_production)
         print("--------------------------------------------------")
-        print("Optimal balancing offer:")
-        #print(self.results.balancing_charge)
-        for k in self.data.SCENARIOS:
-            print(f"Scenario {k}: ", end="")
-            for t in self.data.TIME:
-                print(round(self.results.balancing_power[(t, k)],1), end=", ")
-            print()
-        print("--------------------------------------------------")
-        print("Optimal balancing charging power:")
-        #print(self.results.balance_charge)
-        for k in self.data.SCENARIOS:
-            print(f"Scenario {k}: ", end="")
-            for t in self.data.TIME:
-                print(round(self.results.balancing_charge[(t, k)],1), end=", ")
-            print()
-        print("--------------------------------------------------")
-        print("Optimal balancing discharging power:")
-        #print(self.results.balancing_discharge)
-        for k in self.data.SCENARIOS:
-            print(f"Scenario {k}: ", end="")
-            for t in self.data.TIME:
-                print(round(self.results.balancing_discharge[(t, k)],1), end=", ")
-            print()
-        print("--------------------------------------------------")
+        # print("Optimal balancing offer:")
+        # for k in self.data.SCENARIOS:
+        #     print(f"Scenario {k}: ", end="")
+        #     for t in self.data.TIME:
+        #         print(round(self.results.balancing_power[(t, k)], 1), end=", ")
+        #     print()
+        # print("--------------------------------------------------")
+        # print("Optimal balancing charging power:")
+        # for k in self.data.SCENARIOS:
+        #     print(f"Scenario {k}: ", end="")
+        #     for t in self.data.TIME:
+        #         print(round(self.results.balancing_charge[(t, k)], 1), end=", ")
+        #     print()
+        # print("--------------------------------------------------")
+        # print("Optimal balancing discharging power:")
+        # for k in self.data.SCENARIOS:
+        #     print(f"Scenario {k}: ", end="")
+        #     for t in self.data.TIME:
+        #         print(round(self.results.balancing_discharge[(t, k)], 1), end=", ")
+        #     print()
+        # print("--------------------------------------------------")
+        print("-------------------   PROFITS  -------------------")
+        print("Day-ahead profit:")
+        print(da_profit)
+        if scenario_num:
+            print(f"Balancing profit for scenario {scenario_num}:")
+            print(balancing_profit)
+        else:
+            print("Balancing profit:")
+            print(balancing_profit)
+        print(f"Total profit: {da_profit + balancing_profit}")
+        #print(f"Objective value: {self.results.objective_value}")
 
     def get_extreme_scenarios(self, scenario_windProd):
         # Calculate total wind production for each scenario
@@ -265,11 +293,25 @@ class StochasticOfferingStrategy():
         median_scenario = sorted_scenarios[median_index][0]
         median_wind_production = sorted_scenarios[median_index][1]
 
+        # Calculate max balancing revenue for each scenario
+        balancing_profit = {k:sum(
+            self.data.pi * (self.data.b_price[t, k] - self.data.generator_cost) *
+            self.results.balancing_power[(t, k)]
+            for t in self.data.TIME
+        ) for k in range(1, len(self.data.SCENARIOS) + 1)}
+
+        # total_balancing_power = {k: sum(self.results.balancing_power[(t, k)] for t in range(1, 25)) for k in
+        #                          range(1, len(self.data.SCENARIOS) + 1)}
+
+        # Find the scenario with the maximum balancing power
+        max_balancing_scenario = max(balancing_profit, key=balancing_profit.get)
+        max_balancing_power = balancing_profit[max_balancing_scenario]
+
         print(f"Scenario with minimum wind production: {min_scenario} (Total: {min_wind_production})")
         print(f"Scenario with maximum wind production: {max_scenario} (Total: {max_wind_production})")
         print(f"Scenario with median wind production: {median_scenario} (Total: {median_wind_production})")
-
-
+        print(
+            f"Scenario with highest participation in the balancing market: {max_balancing_scenario} (Total: {max_balancing_power})")
     def plot_results(self, scenario_num):
         """
         Plots the SOC and other results such as charging/discharging power, DA bid, and balancing power.
@@ -340,7 +382,8 @@ class StochasticOfferingStrategy():
         axs[1].legend(lines1, labels1, loc='upper left')
         ax2.legend(lines2, labels2, loc='upper right')
         #axs[1].legend(lines1 + lines2, labels1 + labels2, loc='upper left')
-        plt.savefig(f'figure/s1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
+        #plt.savefig(f'figure/s1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
+        plt.savefig(f's1_scenario{scenario}.jpg', bbox_inches='tight', dpi=300)
         plt.tight_layout()
         plt.show()
 
@@ -438,9 +481,14 @@ if __name__ == '__main__':
     model.display_results()
 
     model.get_extreme_scenarios(scenario_windProd)
-    model.plot_results(scenario_num=19)
-    #model.plot_results(scenario_num=18)
-    model.plot_results(scenario_num=13)
+    print("")
+    #Scenario 19: minimum wind production
+    #model.plot_results(scenario_num=19)
+    model.display_results(scenario_num=19)
+    #Scenario 13: maximum wind production
+    #model.plot_results(scenario_num=13)
+    model.display_results(scenario_num=13)
+    model.display_results(scenario_num=53)
 
 
 
