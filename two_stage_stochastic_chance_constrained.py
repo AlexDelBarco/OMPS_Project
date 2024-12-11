@@ -3,7 +3,6 @@ from gurobipy import GRB
 from scenario_generation_function import generate_scenarios
 import matplotlib.pyplot as plt
 
-
 class Expando(object):
     '''
         A small class which can have attributes set
@@ -113,19 +112,37 @@ class StochasticOfferingStrategy():
         self.big_M = 10000
         self.variables.binary_balance = {
             k: self.model.addVar(
-                vtype=GRB.INTEGER, name='Binary var for balance and da constraint'
+                vtype=GRB.INTEGER, name='Binary var for balance constraint'
+            ) for k in self.data.SCENARIOS
+        }
+
+        self.variables.binary_da = {
+            k: self.model.addVar(
+                vtype=GRB.INTEGER, name='Binary var for da constraint'
             ) for k in self.data.SCENARIOS
         }
 
     def _build_constraints(self):
 
-        self.constraints.balancing_chance_constraint = {
+        self.constraints.balancing_chance_constraint1 = {
             (t, k): self.model.addLConstr(
                 self.data.generator_availability[(t,k)] + self.variables.balancing_discharge[(t,k)]
                 -  self.variables.generator_production[t] - self.variables.balancing_power[(t,k)] - self.variables.balancing_charge[(t,k)],
                 GRB.LESS_EQUAL,
                 self.big_M * (1 - self.variables.binary_balance[k]),
-                name=f'Balancing power chance constraint_{t}_{k}'
+                name=f'Balancing power chance constraint1_{t}_{k}'
+            )
+            for t in self.data.TIME
+            for k in self.data.SCENARIOS
+        }
+
+        self.constraints.balancing_chance_constraint2 = {
+            (t, k): self.model.addLConstr(
+                self.data.generator_availability[(t,k)] + self.variables.balancing_discharge[(t,k)]
+                -  self.variables.generator_production[t] - self.variables.balancing_power[(t,k)] - self.variables.balancing_charge[(t,k)],
+                GRB.GREATER_EQUAL,
+                -(self.big_M * (1 - self.variables.binary_balance[k])),
+                name=f'Balancing power chance constraint2_{t}_{k}'
             )
             for t in self.data.TIME
             for k in self.data.SCENARIOS
@@ -166,27 +183,35 @@ class StochasticOfferingStrategy():
             for k in self.data.SCENARIOS
         }
 
-        self.constraints.DA_constraint_availability = {
+        self.constraints.DA_chance_constraint_availability = {
             (t, k): self.model.addLConstr(
-                self.variables.generator_production[t],
+                self.variables.generator_production[t] - self.data.generator_availability[(t, k)],
                 GRB.LESS_EQUAL,
-                self.data.generator_availability[(t, k)],
-                name=f'p_DA constraint_availability_max{t}_{k}'
+                self.big_M * (1 - self.variables.binary_da[k]),
+                name=f'p_DA chance_constraint_availability_max{t}_{k}'
             )
             for t in Time
             for k in self.data.SCENARIOS
         }
 
-        #chance constraint for balancing power
+        #constraints for binary variables
         self.constraints.binary_balance = self.model.addLConstr(
             gp.quicksum(
                 self.variables.binary_balance[k] for k in self.data.SCENARIOS
             ) / len(self.data.SCENARIOS),
             GRB.GREATER_EQUAL,
             1 - self.epsilon,
-            name='Binary RT constraint',
+            name='Binary balance constraint',
         )
 
+        self.constraints.binary_da = self.model.addLConstr(
+            gp.quicksum(
+                self.variables.binary_da[k] for k in self.data.SCENARIOS
+            ) / len(self.data.SCENARIOS),
+            GRB.GREATER_EQUAL,
+            1 - self.epsilon,
+            name='Binary DA constraint',
+        )
 
     def _build_objective_function(self):
         objective = (
@@ -271,70 +296,16 @@ class StochasticOfferingStrategy():
             print()
         print("--------------------------------------------------")
 
-    def plot_results(self):
-        """
-        Plots the SOC and other results such as charging/discharging power, DA bid, and balancing power.
-        """
-        time = self.data.TIME
-        scenarios = self.data.SCENARIOS
+def plot_results(epsilon_values, revenues):
+    plt.figure(figsize=(8, 5))
+    plt.plot(epsilon_values, revenues, marker='o', label="Revenue")
+    plt.xlabel('Epsilon')
+    plt.ylabel('Revenue')
+    plt.title('Epsilon vs Revenue')
+    plt.grid(True)
+    plt.legend()
 
-        # Extract SOC
-        soc = {t: sum(self.results.soc[(t, k)] for k in scenarios) / len(scenarios) for t in time}
-
-        # DA STAGE
-        # Extract charging and discharging power
-        da_bid = {t: self.results.generator_production[t-1] for t in time}
-        da_price = {t: self.data.da_price[t-1] for t in time}
-
-        # Extract balancing bid (averaged over scenarios)
-        #balancing_bid = {t: sum(self.results.balancing_power[(t, k)] for k in scenarios) / len(scenarios) for t in time}
-        balancing_bid = {(t,k): self.results.balancing_power[(t, k)] for t in time for k in scenarios}
-        balancing_charge = {(t,k): self.results.balancing_charge[(t, k)] for t in time for k in scenarios}
-        balancing_discharge = {(t,k): self.results.balancing_discharge[(t, k)] for t in time for k in scenarios}
-        balancing_price = {(t,k): self.data.b_price[(t,k)] for t in time for k in scenarios}
-
-
-        # Plot SOC
-        plt.figure(figsize=(10, 6))
-        plt.plot(time, [soc[t] for t in time], label="State of Charge (SOC)", color="blue", marker="o")
-        plt.xlabel("Time (t)")
-        plt.ylabel("SOC")
-        plt.title("State of Charge Over Time")
-        plt.grid(True)
-        plt.legend()
-        plt.show()
-
-        # inspected scenario
-        scenario = 1
-        fig, ax1 = plt.subplots(figsize=(10, 6))
-
-        ax1.plot(time, [balancing_bid[t, scenario] for t in time], label=f"Balancing Bid for S{scenario}",
-                 color="green", marker="x")
-        ax1.plot(time, [balancing_charge[t, scenario] for t in time], label=f"Balancing charge S{scenario}",
-                 color="blue", alpha=0.5)
-        ax1.plot(time, [balancing_discharge[t, scenario] for t in time], label=f"Balancing discharge S{scenario}",
-                 color="orange", alpha=0.5)
-        ax1.plot(time, [da_bid[t] for t in time], label="DA Bid", color="green", linestyle="--")
-        ax1.set_xlabel("Time (t)")
-        ax1.set_xticks(time)
-        ax1.set_ylabel("Power (MW)")
-        ax1.set_title("Day-Ahead, Charging/Discharging, and Balancing Power")
-        ax1.grid(True)
-
-        # Create a secondary y-axis for prices
-        ax2 = ax1.twinx()
-        ax2.plot(time, [balancing_price[t, scenario] for t in time], label=f"Balancing Price S{scenario}", color="red",
-                 alpha=0.5)
-        ax2.plot(time, [da_price[t] for t in time], label="DA Price", color="red", linestyle="--", alpha=0.5)
-        ax2.set_ylabel("Price ($)")
-
-        # Add legends for both axes
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1, labels1, loc='upper left')
-        ax2.legend(lines2, labels2, loc='upper right')
-
-        plt.show()
+    plt.show()
 
 if __name__ == '__main__':
     num_wind_scenarios = 20
@@ -343,7 +314,7 @@ if __name__ == '__main__':
     Scenarios = [i for i in range(1, SCENARIOS + 1)]
     Time = [i for i in range(1, 25)]
 
-    scescenario_DA_prices = {}
+    scenario_DA_prices = {}
     scenario_B_prices = {}
     scenario_windProd = {}
     scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
@@ -365,15 +336,19 @@ if __name__ == '__main__':
         da_price=scenario_DA_prices,
         b_price=scenario_B_prices,
         pi=pi,
-        rho_charge=0.8332,  # TODO what were the rho values before??
+        rho_charge=0.8332,
         rho_discharge=0.8332,
         soc_max=120,
         soc_init=10,
         charging_capacity=100
     )
 
-    #try different values of epsilon and plot results.
-    model = StochasticOfferingStrategy(input_data, epsilon=0.1)
-    model.run()
-    model.display_results()
-    model.plot_results()
+    epsilon_values = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+    revenues = []
+
+    for epsilon in epsilon_values:
+        model = StochasticOfferingStrategy(input_data, epsilon=epsilon)
+        model.run()
+        revenues.append(model.results.objective_value)
+    plot_results(epsilon_values, revenues)
+    print(revenues)
