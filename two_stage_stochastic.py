@@ -158,7 +158,7 @@ class StochasticOfferingStrategy():
         }
 
         self.constraints.DA_constraint_availability = {
-            t: self.model.addLConstr(
+            (t, k) : self.model.addLConstr(
                 self.variables.generator_production[t],
                 GRB.LESS_EQUAL,
                 self.data.generator_availability[(t, k)],
