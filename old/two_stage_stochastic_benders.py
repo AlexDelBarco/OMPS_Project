@@ -499,8 +499,8 @@ if __name__ == '__main__':
             da_price=scenario_DA_prices,
             b_price=scenario_B_prices,
             pi=pi,
-            rho_charge=0.9,  # TODO what were the rho values before??
-            rho_discharge=0.9,
+            rho_charge=0.8332,  # TODO what were the rho values before??
+            rho_discharge=0.8332,
             soc_max=120,
             soc_init=10,
             charging_capacity=100

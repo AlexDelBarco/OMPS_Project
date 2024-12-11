@@ -3,7 +3,16 @@ from gurobipy import GRB
 from scenario_generation_function import generate_scenarios
 import matplotlib.pyplot as plt
 
-SOC_st = [0]
+results = {
+    "soc": {},
+    "balancing_power": {},
+    "balancing_charge": {},
+    "balancing_discharge": {},
+    "objective_value": {},
+}
+
+SOC_st = []
+SOC_st.append(10)
 
 for h in range(1,25):
     class InputData:
@@ -63,32 +72,32 @@ for h in range(1,25):
         num_price_scenarios = 5
         SCENARIOS = num_wind_scenarios * num_price_scenarios
         Scenarios = [i for i in range(1, SCENARIOS + 1)]
-        Time = [1]
+        Time = [h]
 
         scescenario_DA_prices = {}
         scenario_B_prices = {}
         scenario_windProd = {}
         scenario_DA_prices, scenario_B_prices, scenario_windProd = generate_scenarios(num_price_scenarios, num_wind_scenarios)
 
-        print(scenario_windProd)
+        scenario_B_prices = {key: value for key, value in scenario_B_prices.items() if key[0] == h}
+        scenario_windProd = {key: value for key, value in scenario_windProd.items() if key[0] == h}
+
 
         scenario_DA_prices = [
             51.49, 48.39, 48.92, 49.45, 42.72, 50.84, 82.15, 100.96, 116.60,
             112.20, 108.54, 111.61, 114.02, 127.40, 134.02, 142.18, 147.42,
             155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
         ]
-        da_production = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 31.549490884357137, 32.76784850051348, 31.064958809504038,
-                         31.332530016698215, 30.88555999023277, 28.76005112309651, 28.9701378870548, 0.0,
-                         32.196188026852454, 0.0, 48.0, 0.0, 0.0, 33.55400332783193, 0.0, 0.0, 0.0]
+
+
+        da_production =  [19.38809586917009, 21.503560001390973, 22.470803694851874, 25.455881096031092, 28.095600215068348,
+         24.831544139658043, 25.044261446962928, 24.680626664933506, 26.62202031828845, 28.128963658061036,
+         27.559908610050755, 26.540759164792767, 25.18216095126608, 25.658854186304207, 27.9539416745984,
+         24.947139937413866, 20.913987154615185, 23.277756558519155, 20.773859557669823, 22.443171461887,
+         25.903047336543384, 28.37591189666934, 26.278558704228168, 25.909366451370115]
+
         SOC = SOC_st[-1]
 
-        b_price = {
-            (1, 1): 88.31, (1, 2): 136.25, (1, 3): 85.61, (1, 4): 137.09, (1, 5): 146.05,
-            (2, 1): 134.67, (2, 2): 96.76, (2, 3): 139.7, (2, 4): 96.58, (2, 5): 117.66,
-            (3, 1): 112.06, (3, 2): 86.55, (3, 3): 79.03, (3, 4): 115.01, (3, 5): 115.76,
-            (4, 1): 85.12, (4, 2): 122.11, (4, 3): 83.61, (4, 4): 80.92, (4, 5): 90.75,
-            (5, 1): 111.76, (5, 2): 141.14, (5, 3): 135.55, (5, 4): 75.47, (5, 5): 118.62
-        }
 
         # Equal probability of each scenario 1/100
         pi = 1 / SCENARIOS
@@ -98,20 +107,24 @@ for h in range(1,25):
             TIME=Time,
             generator_cost=20,
             generator_capacity=48,
-            generator_availability=scenario_windProd,
-            generator_DAbid=da_production[h],
-            da_price=scenario_DA_prices[h],
-            b_price=scenario_B_prices,
+            generator_availability=scenario_windProd, # WF production
+            generator_DAbid=da_production[h-1], # # Power to DA
+            da_price=scenario_DA_prices[h-1], # DA price
+            b_price=scenario_B_prices, # Balancing price
             pi=pi,
             rho_charge=0.9,  # TODO what were the rho values before??
             rho_discharge=0.9,
             SOC=SOC,
             soc_max=120,
-            soc_init=10,
+            soc_init=10, # I dont think I need it
             charging_capacity=100
         )
-
-
+    print('HEEEEEEEREEEEEEEEEE')
+    print(f'Wind Prod for {h} {scenario_windProd}')
+    print(f'DA prod for {h} {da_production[h-1]}')
+    print(f'DA prices for {h} {scenario_DA_prices[h-1]}')
+    print(f'B prices for {h} {scenario_B_prices}')
+    print(f'SOC for {h} {SOC}')
     print('End Input Data')
 
     class Expando(object):
@@ -132,7 +145,7 @@ for h in range(1,25):
         def _build_variables(self):
             self.variables.soc = {
                 (t, k): self.model.addVar(
-                    lb=0, ub=GRB.INFINITY, name=f'State of charge_{t}_{k}'
+                    lb=0, ub=1000, name=f'State of charge_{t}_{k}'
                 )
                 for t in self.data.TIME
                 for k in self.data.SCENARIOS
@@ -177,8 +190,8 @@ for h in range(1,25):
                 )
                 for k in self.data.SCENARIOS
                 for t in self.data.TIME
-
             }
+
 
             self.constraints.SOC_max = {
                 (t, k): self.model.addLConstr(
@@ -193,7 +206,7 @@ for h in range(1,25):
 
             self.constraints.SOC_time = {
                 (t, k): self.model.addLConstr(
-                    self.variables.soc[(t-1,k)] + (self.variables.balancing_charge[(t,k)])* self.data.rho_charge
+                    self.data.SOC + (self.variables.balancing_charge[(t,k)])* self.data.rho_charge
                     - (self.variables.balancing_discharge[(t,k)]) * (1/self.data.rho_discharge),
                     GRB.EQUAL,
                     self.variables.soc[(t,k)],
@@ -201,19 +214,18 @@ for h in range(1,25):
                 )
                 for k in self.data.SCENARIOS
                 for t in self.data.TIME
-                if t > 1
             }
 
-            self.constraints.SOC_init = {
-                (k): self.model.addLConstr(
-                    self.data.soc_init + ( self.variables.balancing_charge[(1,k)]) * self.data.rho_charge
-                    - ( self.variables.balancing_discharge[(1,k)]) * (1/self.data.rho_discharge),
-                    GRB.EQUAL,
-                    self.variables.soc[(1,k)],
-                    name=f'SOC initial constraint{1}_{k}'
-                )
-                for k in self.data.SCENARIOS
-            }
+            #self.constraints.SOC_init = {
+            #    (k): self.model.addLConstr(
+            #        self.data.soc_init + ( self.variables.balancing_charge[(1,k)]) * self.data.rho_charge
+            #        - ( self.variables.balancing_discharge[(1,k)]) * (1/self.data.rho_discharge),
+            #        GRB.EQUAL,
+            #        self.variables.soc[(1,k)],
+            #        name=f'SOC initial constraint{1}_{k}'
+            #    )
+            #    for k in self.data.SCENARIOS
+            #}
 
         def _build_objective_function(self):
             objective = (
@@ -268,12 +280,110 @@ for h in range(1,25):
                 raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
 
 
-
     model = StochasticOfferingStrategy(input_data)
     model.run()
 
-    soc_value = sum(model.results.soc[(1, k)] for k in model.data.SCENARIOS)
+    results["soc"][h] = model.results.soc
+    results["balancing_power"][h] = model.results.balancing_power
+    results["balancing_charge"][h] = model.results.balancing_charge
+    results["balancing_discharge"][h] = model.results.balancing_discharge
+    results["objective_value"][h] = model.results.objective_value
+
+    soc_value = sum(model.results.soc[(h, k)] for k in model.data.SCENARIOS)
     SOC_st.append(soc_value/SCENARIOS)
     #model.display_results()
+
+# Initialize the dictionary to store the mean results
+mean_results = {
+    "soc": {},
+    "balancing_power": {},
+    "balancing_charge": {},
+    "balancing_discharge": {},
+    "objective_value": {},
+    "scenario_DA_prices": {},
+    "da_production": {},
+    "scenario_B_price_mean": {}
+}
+
+# Iterate over each hour in the results dictionary
+for h in range(1, 25):
+    scenarios = list(results["soc"][h].keys())  # Get the list of scenarios for the hour
+    num_scenarios = len(scenarios)
+
+    # Compute the mean for each metric
+    mean_results["soc"][h] = sum(results["soc"][h][k] for k in scenarios) / num_scenarios
+    mean_results["balancing_power"][h] = sum(results["balancing_power"][h][k] for k in scenarios) / num_scenarios
+    mean_results["balancing_charge"][h] = sum(results["balancing_charge"][h][k] for k in scenarios) / num_scenarios
+    mean_results["balancing_discharge"][h] = sum(results["balancing_discharge"][h][k] for k in scenarios) / num_scenarios
+    mean_results["objective_value"][h] = results["objective_value"][h]  # Already aggregated per hour
+
+    # Add scenario_DA_prices and da_production (no mean calculation needed)
+    mean_results["scenario_DA_prices"][h] = scenario_DA_prices[h - 1]
+    mean_results["da_production"][h] = da_production[h - 1]
+
+    # Calculate the mean of scenario_B_prices across all scenarios
+    mean_results["scenario_B_price_mean"][h] = sum(results["balancing_power"][h][k] for k in scenarios) / num_scenarios
+
+# Print the mean results
+print(mean_results)
+
+
+
+print('Plts')
+
+#Plot
+time = [i for i in range(1, 25)]
+
+# Plot SOC
+fig, axs = plt.subplots(2, 1, figsize=(12, 12))
+
+axs[0].plot(time, [mean_results['soc'][t] for t in range(1, 25)], label="State of Charge (SOC)", color="blue", marker="o")
+axs[0].set_xlabel("Time [hour]")
+axs[0].set_ylabel("SOC")
+axs[0].set_title(f"Mean SOC for all scenarios")
+axs[0].grid(True)
+axs[0].legend()
+
+print('here')
+
+axs[1].bar(time, [mean_results['balancing_charge'][t] for t in range(1, 25)], label=f"Battery charge",
+           color="blue", alpha=0.5)
+axs[1].bar(time, [mean_results['balancing_discharge'][t] for t in range(1, 25)], label=f"Battery discharge",
+           color="orange", alpha=0.5)
+axs[1].plot(time, [mean_results['balancing_power'][t] for t in range(1, 25)], label=f"Balancing Bid for",
+            color="green", marker="x")
+axs[1].plot(time, [da_production[t] for t in range(1, 25)], label="DA Bid", color="green", linestyle="--")
+axs[1].set_xlabel("Time (t)")
+axs[1].set_xticks(time)
+axs[1].set_ylabel("Power (MW)")
+axs[1].set_title(f"Power  and Prices for S{scenario}")
+axs[1].grid(True)
+axs[1].legend()
+
+# Create a secondary y-axis for prices
+ax2 = axs[1].twinx()
+ax2.plot(time, [mean_results['scenario_B_price_mean'][t] for t in time], label=f"Balancing Price", color="red",
+         alpha=0.5)
+ax2.plot(time, [mean_results['scenario_DA_prices'][t] for t in time], label="DA Price", color="red", linestyle="--", alpha=0.5)
+
+# the next few lines are necessary for aligning the price and power axis
+ylim = max(axs[1].get_ylim())
+negative_percentage = ((min(mean_results['balancing_charge'].values()) / ylim))
+negative_percentage = (min(axs[1].get_ylim()) / ylim)
+ax2.set_ylim((max(ax2.get_ylim()) * negative_percentage), max(ax2.get_ylim()))  # Set y-axis limits for prices
+ax2.set_ylabel("Price ($)")
+
+lines1, labels1 = axs[1].get_legend_handles_labels()
+lines2, labels2 = ax2.get_legend_handles_labels()
+axs[1].legend(lines1, labels1, loc='upper left')
+ax2.legend(lines2, labels2, loc='upper right')
+# axs[1].legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+# plt.savefig(f'figure/s1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
+plt.tight_layout()
+plt.show()
+
+
+# Print the mean results
+print(mean_results)
 
 print('End')
