@@ -184,6 +184,8 @@ class benders_master:  # class of master problem
         self.data.gamma_values = {}  # initialize list of gamma values
         self.data.subproblem_objectives = {}  # initialize list of subproblems objective values
         self.data.master_objectives = {}  # initialize list of master problem objective values
+        self.data.da_results = {}  # initialize list of da power bid results
+        self.data.balancing_results = {}  # initialize list of balancing power bid results
 
     def _build_model(self):  # build gurobi model
         self.model = gb.Model(name='master')  # build model
@@ -308,6 +310,12 @@ class benders_master:  # class of master problem
         self.data.da_dual[self.data.iteration] = {
             (t, s): self.subproblem[s].constraints.DA_constraint[t].Pi for t in TIME for s in SCENARIOS}
 
+        self.data.da_results[self.data.iteration] = {
+            (t, s): self.subproblem[s].variables.p_DA[t].x for t in TIME for s in SCENARIOS}
+
+        self.data.balancing_results[self.data.iteration] = {
+            (t, s): self.subproblem[s].variables.p_B[(t, s)].x for t in TIME for s in SCENARIOS}
+
         # save subproblems objective values
         self.data.subproblem_objectives[self.data.iteration] = {s: self.subproblem[s].model.ObjVal for s in SCENARIOS}
 
@@ -351,8 +359,55 @@ class benders_master:  # class of master problem
                  self.data.iteration < self.data.max_iters)):
             self._do_benders_step()
 
-# solve and print results
-DA_model = benders_master(epsilon=0.001, max_iters=100)
-DA_model._benders_iterate()
+    def plot_results(self, scenario_num, iteration):
+        """
+        Plots results of DA bid and balancing power.
+        """
+        # inspected scenario
+        scenario = scenario_num
+        time = TIME
+        scenarios = SCENARIOS
 
+        # DA STAGE
+        da_bid = {t: self.data.da_results[iteration][(t, k)] for t in time for k in scenarios}
+        da_price = {t: scenario_DA_prices[t - 1] for t in time}
+
+        # Extract balancing bid (averaged over scenarios)
+        balancing_bid = {(t, k): self.data.balancing_results[iteration][(t, k)] for t in time for k in scenarios}
+        balancing_price = {(t, k): scenario_B_prices[(t, k)] for t in time for k in scenarios}
+
+        fig, axs1 = plt.subplots(figsize=(9, 6))
+        axs1.plot(time, [balancing_bid[t, scenario] for t in time], label=f"Balancing Bid for S{scenario}",
+                    color="green", marker="x")
+        axs1.plot(time, [da_bid[t] for t in time], label="DA Bid", color="green", linestyle="--")
+        axs1.set_xlabel("Time (t)")
+        axs1.set_xticks(time)
+        axs1.set_ylabel("Power (MW)")
+        axs1.set_title(f"Power  and Prices for S{scenario}")
+        axs1.grid(True)
+        axs1.legend()
+
+        # Create a secondary y-axis for prices
+        ax2 = plt.twinx()
+        ax2.plot(time, [balancing_price[t, scenario] for t in time], label=f"Balancing Price S{scenario}", color="red",
+                 alpha=0.5)
+        ax2.plot(time, [da_price[t] for t in time], label="DA Price", color="red", linestyle="--", alpha=0.5)
+
+        ax2.set_ylabel("Price ($)")
+
+
+        lines1, labels1 = axs1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        axs1.legend(lines1, labels1, loc='upper left')
+        ax2.legend(lines2, labels2, loc='upper right')
+        #plt.savefig(f'figure/s1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
+        #plt.savefig(f's1_scenario{scenario}.jpg', bbox_inches='tight', dpi=300)
+        plt.tight_layout()
+        plt.show()
+
+# solve and print results
+DA_model = benders_master(epsilon=0.1, max_iters=1000)
+DA_model._benders_iterate()
+DA_model.plot_results(13, DA_model.data.iteration)
+DA_model.plot_results(19, DA_model.data.iteration)
 print('Optimal cost ', DA_model.data.upper_bounds[DA_model.data.iteration])  # print optimal cost (last upper-bound)

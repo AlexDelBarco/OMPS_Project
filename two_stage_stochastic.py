@@ -190,7 +190,6 @@ class StochasticOfferingStrategy():
         self._build_objective_function()
         self.model.update()
 
-    #Save results is not changed yet
     def _save_results(self):
         self.results.objective_value = self.model.ObjVal
         self.results.generator_production = [
