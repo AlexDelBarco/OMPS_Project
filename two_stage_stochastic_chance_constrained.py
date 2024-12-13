@@ -308,8 +308,8 @@ def plot_results(epsilon_values, revenues):
     plt.show()
 
 if __name__ == '__main__':
-    num_wind_scenarios = 20
-    num_price_scenarios = 20
+    num_wind_scenarios = 4
+    num_price_scenarios = 4
     SCENARIOS = num_wind_scenarios * num_price_scenarios
     Scenarios = [i for i in range(1, SCENARIOS + 1)]
     Time = [i for i in range(1, 25)]
