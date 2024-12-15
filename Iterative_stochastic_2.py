@@ -212,17 +212,6 @@ for h in range(1,25):
                 for t in self.data.TIME
             }
 
-            self.constraints.discharge_max = {  #NEW
-                (t, k): self.model.addLConstr(
-                    self.variables.balancing_discharge[(t,k)],
-                    GRB.LESS_EQUAL,
-                    self.data.SOC[k],
-                    name=f'Max discharge energy in battery constraint_{t}_{k}'
-                )
-                for k in self.data.SCENARIOS
-                for t in self.data.TIME
-            }
-
             self.constraints.SOC_time = {
                 (t, k): self.model.addLConstr(
                     self.data.SOC[k] + (self.variables.balancing_charge[(t,k)])* self.data.rho_charge
@@ -234,17 +223,6 @@ for h in range(1,25):
                 for k in self.data.SCENARIOS
                 for t in self.data.TIME
             }
-
-            #self.constraints.SOC_init = {
-            #    (k): self.model.addLConstr(
-            #        self.data.soc_init + ( self.variables.balancing_charge[(1,k)]) * self.data.rho_charge
-            #        - ( self.variables.balancing_discharge[(1,k)]) * (1/self.data.rho_discharge),
-            #        GRB.EQUAL,
-            #        self.variables.soc[(1,k)],
-            #        name=f'SOC initial constraint{1}_{k}'
-            #    )
-            #    for k in self.data.SCENARIOS
-            #}
 
         def _build_objective_function(self):
             objective = (
@@ -473,7 +451,7 @@ lines2, labels2 = ax2.get_legend_handles_labels()
 axs[1].legend(lines1, labels1, loc='upper left')
 ax2.legend(lines2, labels2, loc='upper right')
 # axs[1].legend(lines1 + lines2, labels1 + labels2, loc='upper left')
-# plt.savefig(f'figure/s1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
+plt.savefig('fig_iterative_Mean.jpg',bbox_inches='tight',dpi=300)
 plt.tight_layout()
 plt.show()
 
@@ -520,7 +498,7 @@ lines2, labels2 = ax2.get_legend_handles_labels()
 axs[1].legend(lines1, labels1, loc='upper left')
 ax2.legend(lines2, labels2, loc='upper right')
 # axs[1].legend(lines1 + lines2, labels1 + labels2, loc='upper left')
-# plt.savefig(f'figure/s1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
+plt.savefig('fig_iterative_Min.jpg',bbox_inches='tight',dpi=300)
 plt.tight_layout()
 plt.show()
 
@@ -568,7 +546,7 @@ lines2, labels2 = ax2.get_legend_handles_labels()
 axs[1].legend(lines1, labels1, loc='upper left')
 ax2.legend(lines2, labels2, loc='upper right')
 # axs[1].legend(lines1 + lines2, labels1 + labels2, loc='upper left')
-# plt.savefig(f'figure/s1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
+plt.savefig('fig_iterative_Max.jpg',bbox_inches='tight',dpi=300)
 plt.tight_layout()
 plt.show()
 
