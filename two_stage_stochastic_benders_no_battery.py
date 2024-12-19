@@ -12,7 +12,7 @@ num_wind_scenarios = 20
 num_price_scenarios = 20
 s = num_wind_scenarios * num_price_scenarios
 SCENARIOS = [i for i in range(1, s + 1)]
-TIME = [i for i in range(1, 25)]
+TIME = [i for i in range(1, 24)]
 
 scenario_DA_prices = {}
 scenario_B_prices = {}
@@ -405,9 +405,41 @@ class benders_master:  # class of master problem
         plt.tight_layout()
         plt.show()
 
+    def plot_Iterations(self):
+        # Prepare data for plotting
+        iterations = list(self.data.upper_bounds.keys())
+        upper_bounds = list(self.data.upper_bounds.values())
+        lower_bounds = list(self.data.lower_bounds.values())
+
+        scaled_lower_bounds = [value / 10**3 for value in lower_bounds]
+        scaled_upper_bounds = [value / 10**3 for value in upper_bounds]
+
+        # Create a line diagram with both data series in the same plot
+        plt.figure(figsize=(8, 6))
+        plt.plot(iterations, scaled_upper_bounds, marker='o', linestyle='-', label='Upper Bounds')
+        plt.plot(iterations, scaled_lower_bounds, marker='s', linestyle='--', label='Lower Bounds')
+
+        # Add labels, legend, and title
+        plt.xlabel('Iterations')
+        plt.ylabel('Objective Value [$10^3$]')
+        plt.title('Convergence Behaviour of Benders Decomposition')
+        plt.legend()
+        plt.grid(True)
+        plt.ylim(bottom=20)
+
+        plt.legend(title=r'$\epsilon = 0.1$', title_fontsize='medium')
+
+        # Show the plot
+        plt.show()
+
+
+
 # solve and print results
 DA_model = benders_master(epsilon=0.1, max_iters=1000)
 DA_model._benders_iterate()
-DA_model.plot_results(13, DA_model.data.iteration)
-DA_model.plot_results(19, DA_model.data.iteration)
-print('Optimal cost ', DA_model.data.upper_bounds[DA_model.data.iteration])  # print optimal cost (last upper-bound)
+DA_model.plot_Iterations()
+
+
+#DA_model.plot_results(13, DA_model.data.iteration)
+#DA_model.plot_results(19, DA_model.data.iteration)
+#print('Optimal cost ', DA_model.data.upper_bounds[DA_model.data.iteration])  # print optimal cost (last upper-bound)
