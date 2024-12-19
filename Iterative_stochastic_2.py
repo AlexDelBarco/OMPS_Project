@@ -10,7 +10,9 @@ results = {
     "balancing_discharge": {},
     "objective_value": {},
     "B_price": {},
-    "Wind_production": {}
+    "Wind_production": {},
+    "DA_prices": {},
+    "DA_bid": {}
 }
 
 #SOC_st = []
@@ -287,6 +289,8 @@ for h in range(1,25):
     results["objective_value"][h] = model.results.objective_value
     results["B_price"][h] = scenario_B_prices
     results["Wind_production"][h] = scenario_windProd
+    results["DA_prices"][h] = scenario_DA_prices[h - 1]
+    results["DA_bid"][h] = da_production[h -1]
 
     #soc_value = sum(model.results.soc[(h, k)] for k in model.data.SCENARIOS)
     #SOC_st.append(soc_value/SCENARIOS)
@@ -294,6 +298,31 @@ for h in range(1,25):
     SOC_st.append(scenario_SOC)  # Store the dictionary for this hour
 
     #model.display_results()
+
+# Revenue
+print('here')
+
+rev = {
+    "B_revenue": {},
+    "'DA_revenue'": {},
+    "Total_revenue": {}
+}
+
+for h in range(1, 25):
+    scenarios = list(results["soc"][h].keys())  # Get the list of scenarios for the hour
+    num_scenarios = len(scenarios)
+    rev["B_revenue"][h] = {}
+    rev["'DA_revenue'"][h] = {}
+    rev["Total_revenue"][h] = {}
+    for s in range(1, num_scenarios+1):
+        if results["balancing_power"][h][h, s] != 0:
+            rev["B_revenue"][h][h, s] = (results["B_price"][h][h, s]- 20) * (results["balancing_power"][h][h, s])
+        if results["balancing_power"][h][h, s] == 0:
+            rev["B_revenue"][h][h, s] = 0
+        rev["'DA_revenue'"][h] = (results["DA_prices"][h]-20) * (results["DA_bid"][h])
+        rev["Total_revenue"][h][h, s] = rev["B_revenue"][h][h, s] + rev["'DA_revenue'"][h]
+
+#rev['bal_revenue'][]
 
 # Mean results
 mean_results = {
@@ -306,7 +335,8 @@ mean_results = {
     "da_production": {},
     "scenario_B_price_mean": {},
     "B_price": {},
-    "Wind_production": {}
+    "Wind_production": {},
+    "revenue": {}
 }
 
 for h in range(1, 25):
@@ -322,13 +352,15 @@ for h in range(1, 25):
     mean_results["B_price"][h] = sum(results["B_price"][h][k] for k in scenarios) / num_scenarios
     mean_results["Wind_production"][h] = sum(results["Wind_production"][h][k] for k in scenarios) / num_scenarios
 
-
     # Add scenario_DA_prices and da_production (no mean calculation needed)
     mean_results["scenario_DA_prices"][h] = scenario_DA_prices[h - 1]
     mean_results["da_production"][h] = da_production[h - 1]
 
     # Calculate the mean of scenario_B_prices across all scenarios
     mean_results["scenario_B_price_mean"][h] = sum(results["B_price"][h][k] for k in scenarios) / num_scenarios
+
+    # Calculate the mean revenue
+    mean_results["revenue"][h] = sum(rev["Total_revenue"][h][k] for k in scenarios) / num_scenarios
 
 #Results for Min and Max producction 1
 scenario_sums = {i: 0.0 for i in range(1, len(results['Wind_production'][1])+1)}  # There are 25 scenarios
@@ -342,10 +374,6 @@ for hour, values in results['Wind_production'].items():
 min_scenario = min(scenario_sums, key=scenario_sums.get)
 max_scenario = max(scenario_sums, key=scenario_sums.get)
 
-
-
-
-
 max_results = {
     "soc": {},
     "balancing_power": {},
@@ -356,7 +384,8 @@ max_results = {
     "da_production": {},
     "scenario_B_price_mean": {},
     "B_price": {},
-    "Wind_production": {}
+    "Wind_production": {},
+    "revenue": {}
 }
 
 min_results = {
@@ -369,7 +398,8 @@ min_results = {
     "da_production": {},
     "scenario_B_price_mean": {},
     "B_price": {},
-    "Wind_production": {}
+    "Wind_production": {},
+    "revenue": {}
 }
 
 for h in range(1, 25):
@@ -390,6 +420,8 @@ for h in range(1, 25):
     max_results["B_price"][h] = results["B_price"][h][h,max_scenario]
     min_results["Wind_production"][h] = results["Wind_production"][h][h,min_scenario]
     max_results["Wind_production"][h] = results["Wind_production"][h][h,max_scenario]
+    min_results["revenue"][h] = rev["Total_revenue"][h][h, min_scenario]
+    max_results["revenue"][h] = rev["Total_revenue"][h][h, max_scenario]
 
 
     # Add scenario_DA_prices and da_production (no mean calculation needed)
@@ -403,6 +435,10 @@ for h in range(1, 25):
     max_results["scenario_B_price_mean"][h] = results["B_price"][h][h,max_scenario]
     min_results["scenario_B_price_mean"][h] = results["B_price"][h][h,min_scenario]
     max_results["scenario_B_price_mean"][h] = results["B_price"][h][h,max_scenario]
+
+rev_mean = sum(mean_results["revenue"].values())
+rev_min = sum(min_results["revenue"].values())
+rev_max = sum(max_results["revenue"].values())
 
 
 print('Plts Mean')
@@ -551,3 +587,26 @@ plt.tight_layout()
 plt.show()
 
 print('End')
+
+
+def calculate_profits(self, scenario_num=None):
+    da_profit = sum(
+        (self.data.da_price[t - 1] - self.data.generator_cost) * self.results.generator_production[t - 1]
+        for t in self.data.TIME
+    )
+    if scenario_num:
+        balancing_profit = sum(
+            (self.data.b_price[t, scenario_num] - self.data.generator_cost) * self.results.balancing_power[
+                (t, scenario_num)]
+            for t in self.data.TIME
+        )
+    else:
+        total_balancing_profit = sum(
+            (self.data.b_price[t, k] - self.data.generator_cost) * self.results.balancing_power[
+                (t, k)]
+            for t in self.data.TIME
+            for k in self.data.SCENARIOS
+        )
+        balancing_profit = total_balancing_profit / len(self.data.SCENARIOS)
+
+    return da_profit, balancing_profit
