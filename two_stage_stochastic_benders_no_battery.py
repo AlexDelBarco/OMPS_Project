@@ -421,11 +421,13 @@ class benders_master:  # class of master problem
 
         # Add labels, legend, and title
         plt.xlabel('Iterations')
-        plt.ylabel('Objective Value')
+        plt.ylabel('Objective Value [$10^3$]')
         plt.title('Convergence Behaviour of Benders Decomposition')
         plt.legend()
         plt.grid(True)
-        plt.ylim(bottom=0)
+        plt.ylim(bottom=20)
+
+        plt.legend(title=r'$\epsilon = 0.1$', title_fontsize='medium')
 
         # Show the plot
         plt.show()
