@@ -230,15 +230,17 @@ class StochasticOfferingStrategy():
         )
         if scenario_num:
             balancing_profit = sum(
-                self.data.pi * (self.data.b_price[t, scenario_num] - self.data.generator_cost) * self.results.balancing_power[(t, scenario_num)]
+                (self.data.b_price[t, scenario_num] - self.data.generator_cost) * self.results.balancing_power[(t, scenario_num)]
                 for t in self.data.TIME
             )
         else:
-            balancing_profit = sum(
-                self.data.pi * (self.data.b_price[t, k] - self.data.generator_cost) * self.results.balancing_power[(t, k)]
+            total_balancing_profit = sum(
+                (self.data.b_price[t, k] - self.data.generator_cost) * self.results.balancing_power[
+                    (t, k)]
                 for t in self.data.TIME
                 for k in self.data.SCENARIOS
             )
+            balancing_profit = total_balancing_profit / len(self.data.SCENARIOS)
 
         return da_profit, balancing_profit
 
@@ -306,7 +308,7 @@ class StochasticOfferingStrategy():
 
         # Calculate max balancing revenue for each scenario
         balancing_profit = {k:sum(
-            self.data.pi * (self.data.b_price[t, k] - self.data.generator_cost) *
+            (self.data.b_price[t, k] - self.data.generator_cost) *
             self.results.balancing_power[(t, k)]
             for t in self.data.TIME
         ) for k in range(1, len(self.data.SCENARIOS) + 1)}
@@ -354,9 +356,9 @@ class StochasticOfferingStrategy():
 
 
         axs[0].plot(time, [soc[t, scenario] for t in time], label="State of Charge (SOC)", color="blue", marker="o")
-        axs[0].set_xlabel("Time (t)")
-        axs[0].set_ylabel("SOC")
-        axs[0].set_title(f"SOC for S{scenario}")
+        #axs[0].set_xlabel("Time (t)")
+        axs[0].set_ylabel("SOC", fontsize = 14)
+        axs[0].set_title(f"SOC for S{scenario}", fontsize = 16)
         axs[0].grid(True)
         axs[0].legend()
 
@@ -368,10 +370,10 @@ class StochasticOfferingStrategy():
         axs[1].plot(time, [balancing_bid[t, scenario] for t in time], label=f"Balancing Bid for S{scenario}",
                     color="green", marker="x")
         axs[1].plot(time, [da_bid[t] for t in time], label="DA Bid", color="green", linestyle="--")
-        axs[1].set_xlabel("Time (t)")
+        axs[1].set_xlabel("Time (t)",fontsize = 14 )
         axs[1].set_xticks(time)
-        axs[1].set_ylabel("Power (MW)")
-        axs[1].set_title(f"Power  and Prices for S{scenario}")
+        axs[1].set_ylabel("Power (MW)", fontsize = 14)
+        axs[1].set_title(f"Power  and Prices for S{scenario}", fontsize = 16)
         axs[1].grid(True)
         axs[1].legend()
 
@@ -386,7 +388,7 @@ class StochasticOfferingStrategy():
         negative_percentage = ((min(balancing_charge.values()) /ylim))
         negative_percentage = (min(axs[1].get_ylim()) /ylim)
         ax2.set_ylim((max(ax2.get_ylim())*negative_percentage), max(ax2.get_ylim()))  # Set y-axis limits for prices
-        ax2.set_ylabel("Price ($)")
+        ax2.set_ylabel("Price (€/MWh)", fontsize = 14)
 
 
         lines1, labels1 = axs[1].get_legend_handles_labels()
@@ -394,7 +396,7 @@ class StochasticOfferingStrategy():
         axs[1].legend(lines1, labels1, loc='upper left')
         ax2.legend(lines2, labels2, loc='upper right')
         #axs[1].legend(lines1 + lines2, labels1 + labels2, loc='upper left')
-        #plt.savefig(f'figure/s1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
+        #plt.savefig(f's1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
         plt.savefig(f's1_scenario{scenario}.jpg', bbox_inches='tight', dpi=300)
         plt.tight_layout()
         plt.show()
@@ -444,15 +446,14 @@ if __name__ == '__main__':
     model.get_extreme_scenarios(scenario_windProd)
     print("")
     #Scenario 19: minimum wind production
-    #model.plot_results(scenario_num=19)
-    model.display_results(scenario_num=19)
-    #Scenario 13: maximum wind production
-    #model.plot_results(scenario_num=13)
-    model.display_results(scenario_num=13)
-    model.display_results(scenario_num=53)
+    model.plot_results(scenario_num=19)
+    # model.display_results(scenario_num=19)
+    # #Scenario 13: maximum wind production
+    model.plot_results(scenario_num=13)
+    # model.display_results(scenario_num=13)
 
-    model_PI = StochasticOfferingStrategy(input_data)
-    model_PI.run()
-    model_PI.display_results()
+    # model_PI = StochasticOfferingStrategy(input_data)
+    # model_PI.run()
+    # model_PI.display_results()
 
 print('End')

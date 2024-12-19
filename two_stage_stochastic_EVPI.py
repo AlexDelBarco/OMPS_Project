@@ -230,6 +230,7 @@ class StochasticOfferingStrategy():
 
     def _build_model(self):
         self.model = gp.Model(name='Two-stage stochastic offering strategy')
+        self.model.setParam('OutputFlag', 0)  # Suppress solver output
         self._build_variables()
         self._build_constraints()
         self._build_objective_function()
@@ -272,104 +273,207 @@ class StochasticOfferingStrategy():
                 print(f"Constraint {c.ConstrName}: Slack={c.slack}")
             raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
 
-    def display_results(self):
+
+    def calculate_profits(self, scenario_num = None):
+
+        if self.perfect_information:
+            if scenario_num:
+                da_profit = sum(
+                    (self.data.da_price[t - 1] - self.data.generator_cost) * self.results.generator_production[(t, scenario_num)]
+                    for t in self.data.TIME
+                )
+            else:
+                da_profit_total = sum(
+                    (self.data.da_price[t - 1] - self.data.generator_cost) * self.results.generator_production[(t, k)]
+                    for t in self.data.TIME
+                    for k in self.data.SCENARIOS
+                )
+                da_profit = da_profit_total / len(self.data.SCENARIOS)
+
+        else:
+            da_profit = sum(
+                (self.data.da_price[t - 1] - self.data.generator_cost) * self.results.generator_production[(t)]
+                for t in self.data.TIME
+        )
+        if scenario_num:
+            balancing_profit = sum(
+                (self.data.b_price[t, scenario_num] - self.data.generator_cost) * self.results.balancing_power[(t, scenario_num)]
+                for t in self.data.TIME
+            )
+        else:
+            total_balancing_profit = sum(
+                (self.data.b_price[t, k] - self.data.generator_cost) * self.results.balancing_power[
+                    (t, k)]
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
+            )
+            balancing_profit = total_balancing_profit / len(self.data.SCENARIOS)
+
+        return da_profit, balancing_profit
+
+    def display_results(self, scenario_num = None):
+        da_profit, balancing_profit = self.calculate_profits(scenario_num)
+
         print()
         print("-------------------   RESULTS  -------------------")
-        print("Expected day-ahead profit:")
-        print(self.results.objective_value)
-        print("Optimal generator offer:")
         if self.perfect_information:
-            for k in self.data.SCENARIOS:
-                print(f"Scenario {k}: ", end="")
-                for t in self.data.TIME:
-                    print(round(self.results.generator_production[(t, k)],1), end=", ")
-                print()
+            print("PERFECT INFO - Expected day-ahead profit:")
         else:
-            print(self.results.generator_production)
+            print("Expected day-ahead profit:")
+        #print(self.results.objective_value)
+        # print("Optimal generator offer:")
+        # if self.perfect_information:
+        #     for k in self.data.SCENARIOS:
+        #         print(f"Scenario {k}: ", end="")
+        #         for t in self.data.TIME:
+        #             print(round(self.results.generator_production[(t, k)],1), end=", ")
+        #         print()
+        # else:
+        #     print(self.results.generator_production)
+        # print("--------------------------------------------------")
+        # print("Optimal balancing offer:")
+        # for k in self.data.SCENARIOS:
+        #     print(f"Scenario {k}: ", end="")
+        #     for t in self.data.TIME:
+        #         print(round(self.results.balancing_power[(t, k)],1), end=", ")
+        #     print()
+        # print("--------------------------------------------------")
+        # print("Optimal balancing charging power:")
+        # for k in self.data.SCENARIOS:
+        #     print(f"Scenario {k}: ", end="")
+        #     for t in self.data.TIME:
+        #         print(round(self.results.balancing_charge[(t, k)],1), end=", ")
+        #     print()
+        # print("--------------------------------------------------")
+        # print("Optimal balancing discharging power:")
+        # for k in self.data.SCENARIOS:
+        #     print(f"Scenario {k}: ", end="")
+        #     for t in self.data.TIME:
+        #         print(round(self.results.balancing_discharge[(t, k)],1), end=", ")
+        #     print()
         print("--------------------------------------------------")
-        print("Optimal balancing offer:")
-        for k in self.data.SCENARIOS:
-            print(f"Scenario {k}: ", end="")
-            for t in self.data.TIME:
-                print(round(self.results.balancing_power[(t, k)],1), end=", ")
-            print()
-        print("--------------------------------------------------")
-        print("Optimal balancing charging power:")
-        for k in self.data.SCENARIOS:
-            print(f"Scenario {k}: ", end="")
-            for t in self.data.TIME:
-                print(round(self.results.balancing_charge[(t, k)],1), end=", ")
-            print()
-        print("--------------------------------------------------")
-        print("Optimal balancing discharging power:")
-        for k in self.data.SCENARIOS:
-            print(f"Scenario {k}: ", end="")
-            for t in self.data.TIME:
-                print(round(self.results.balancing_discharge[(t, k)],1), end=", ")
-            print()
-        print("--------------------------------------------------")
+        print("-------------------   PROFITS  -------------------")
+        print("Day-ahead profit:")
+        print(da_profit)
+        if scenario_num:
+            print(f"Balancing profit for scenario {scenario_num}:")
+            print(balancing_profit)
+        else:
+            print("Balancing profit:")
+            print(balancing_profit)
+        print(f"Total profit: {da_profit + balancing_profit}")
 
-    def plot_results(self):
+    def get_extreme_scenarios(self, scenario_windProd):
+        # Calculate total wind production for each scenario
+        total_wind_production = {k: sum(scenario_windProd[(t, k)] for t in range(1, 25)) for k in
+                                 range(1, len(self.data.SCENARIOS) + 1)}
+
+        # Find the scenario with the minimum wind production
+        min_scenario = min(total_wind_production, key=total_wind_production.get)
+        min_wind_production = total_wind_production[min_scenario]
+
+        # Find the scenario with the maximum wind production
+        max_scenario = max(total_wind_production, key=total_wind_production.get)
+        max_wind_production = total_wind_production[max_scenario]
+
+        # Find the scenario with the median wind production
+        sorted_scenarios = sorted(total_wind_production.items(), key=lambda item: item[1])
+        median_index = len(sorted_scenarios) // 2
+        median_scenario = sorted_scenarios[median_index][0]
+        median_wind_production = sorted_scenarios[median_index][1]
+
+        # Calculate max balancing revenue for each scenario
+        balancing_profit = {k:sum(
+            (self.data.b_price[t, k] - self.data.generator_cost) *
+            self.results.balancing_power[(t, k)]
+            for t in self.data.TIME
+        ) for k in range(1, len(self.data.SCENARIOS) + 1)}
+
+        # total_balancing_power = {k: sum(self.results.balancing_power[(t, k)] for t in range(1, 25)) for k in
+        #                          range(1, len(self.data.SCENARIOS) + 1)}
+
+        # Find the scenario with the maximum balancing power
+        max_balancing_scenario = max(balancing_profit, key=balancing_profit.get)
+        max_balancing_power = balancing_profit[max_balancing_scenario]
+
+        print(f"Scenario with minimum wind production: {min_scenario} (Total: {min_wind_production})")
+        print(f"Scenario with maximum wind production: {max_scenario} (Total: {max_wind_production})")
+        print(f"Scenario with median wind production: {median_scenario} (Total: {median_wind_production})")
+        print(
+            f"Scenario with highest participation in the balancing market: {max_balancing_scenario} (Total: {max_balancing_power})")
+
+
+    def plot_results(self, scenario_num):
         """
         Plots the SOC and other results such as charging/discharging power, DA bid, and balancing power.
         """
+        # inspected scenario
+        scenario = scenario_num
         time = self.data.TIME
         scenarios = self.data.SCENARIOS
 
         # Extract SOC
-        soc = {t: sum(self.results.soc[(t, k)] for k in scenarios) / len(scenarios) for t in time}
+        soc = soc = {(t, k): self.results.soc[(t, k)] for t in time for k in scenarios}
 
         # DA STAGE
         # Extract charging and discharging power
-        da_bid = {t: self.results.generator_production[t] for t in time}
+        da_bid = {t: self.results.generator_production[(t,scenario_num)] for t in time}
         da_price = {t: self.data.da_price[t-1] for t in time}
 
         # Extract balancing bid (averaged over scenarios)
-        balancing_bid = {(t,k): self.results.balancing_power[(t, k)] for t in time for k in scenarios}
-        balancing_charge = {(t,k): self.results.balancing_charge[(t, k)] for t in time for k in scenarios}
-        balancing_discharge = {(t,k): self.results.balancing_discharge[(t, k)] for t in time for k in scenarios}
-        balancing_price = {(t,k): self.data.b_price[(t,k)] for t in time for k in scenarios}
+        balancing_bid = {(t, k): self.results.balancing_power[(t, k)] for t in time for k in scenarios}
+        balancing_charge = {(t, k): self.results.balancing_charge[(t, k)] for t in time for k in scenarios} \
+            # multiply each element of balancing chaarge by -1
+        balancing_charge = {key: -value for key, value in balancing_charge.items()}
+        balancing_discharge = {(t, k): self.results.balancing_discharge[(t, k)] for t in time for k in scenarios}
+        balancing_price = {(t, k): self.data.b_price[(t, k)] for t in time for k in scenarios}
 
         # Plot SOC
-        plt.figure(figsize=(10, 6))
-        plt.plot(time, [soc[t] for t in time], label="State of Charge (SOC)", color="blue", marker="o")
-        plt.xlabel("Time (t)")
-        plt.ylabel("SOC")
-        plt.title("State of Charge Over Time")
-        plt.grid(True)
-        plt.legend()
-        plt.show()
+        fig, axs = plt.subplots(2, 1, figsize=(12, 12))
 
-        # inspected scenario
-        scenario = 1
-        fig, ax1 = plt.subplots(figsize=(10, 6))
+        axs[0].plot(time, [soc[t, scenario] for t in time], label="State of Charge (SOC)", color="blue", marker="o")
+        # axs[0].set_xlabel("Time (t)")
+        axs[0].set_ylabel("SOC", fontsize=14)
+        axs[0].set_ylim(0, self.data.soc_max)
+        axs[0].set_title(f"SOC for S{scenario}", fontsize=16)
+        axs[0].grid(True)
+        axs[0].legend()
 
-        ax1.plot(time, [balancing_bid[t, scenario] for t in time], label=f"Balancing Bid for S{scenario}",
-                 color="green", marker="x")
-        ax1.plot(time, [balancing_charge[t, scenario] for t in time], label=f"Balancing charge S{scenario}",
-                 color="blue", alpha=0.5)
-        ax1.plot(time, [balancing_discharge[t, scenario] for t in time], label=f"Balancing discharge S{scenario}",
-                 color="orange", alpha=0.5)
-        ax1.plot(time, [da_bid[t] for t in time], label="DA Bid", color="green", linestyle="--")
-        ax1.set_xlabel("Time (t)")
-        ax1.set_xticks(time)
-        ax1.set_ylabel("Power (MW)")
-        ax1.set_title("Day-Ahead, Charging/Discharging, and Balancing Power")
-        ax1.grid(True)
+        axs[1].bar(time, [balancing_charge[t, scenario] for t in time], label=f"Battery charge S{scenario}",
+                   color="blue", alpha=0.5)
+        axs[1].bar(time, [balancing_discharge[t, scenario] for t in time], label=f"Battery discharge S{scenario}",
+                   color="orange", alpha=0.5)
+        axs[1].plot(time, [balancing_bid[t, scenario] for t in time], label=f"Balancing Bid for S{scenario}",
+                    color="green", marker="x")
+        axs[1].plot(time, [da_bid[t] for t in time], label="DA Bid", color="green", linestyle="--")
+        axs[1].set_xlabel("Time (t)", fontsize=14)
+        axs[1].set_xticks(time)
+        axs[1].set_ylabel("Power (MW)", fontsize=14)
+        axs[1].set_title(f"Power  and Prices for S{scenario}", fontsize=16)
+        axs[1].grid(True)
+        axs[1].legend()
 
         # Create a secondary y-axis for prices
-        ax2 = ax1.twinx()
+        ax2 = axs[1].twinx()
         ax2.plot(time, [balancing_price[t, scenario] for t in time], label=f"Balancing Price S{scenario}", color="red",
                  alpha=0.5)
         ax2.plot(time, [da_price[t] for t in time], label="DA Price", color="red", linestyle="--", alpha=0.5)
-        ax2.set_ylabel("Price ($)")
 
-        # Add legends for both axes
-        lines1, labels1 = ax1.get_legend_handles_labels()
+        # the next few lines are necessary for aligning the price and power axis
+        ylim = max(axs[1].get_ylim())
+        negative_percentage = ((min(balancing_charge.values()) / ylim))
+        negative_percentage = (min(axs[1].get_ylim()) / ylim)
+        ax2.set_ylim((max(ax2.get_ylim()) * negative_percentage), max(ax2.get_ylim()))  # Set y-axis limits for prices
+        ax2.set_ylabel("Price (€/MWh)", fontsize=14)
+
+        lines1, labels1 = axs[1].get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1, labels1, loc='upper left')
+        axs[1].legend(lines1, labels1, loc='upper left')
         ax2.legend(lines2, labels2, loc='upper right')
-
+        # axs[1].legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+        # plt.savefig(f's1_scenario{scenario}.jpg',bbox_inches='tight',dpi=300)
+        plt.savefig(f's1_scenario{scenario}.jpg', bbox_inches='tight', dpi=300)
+        plt.tight_layout()
         plt.show()
 
 def calculate_evpi(model: StochasticOfferingStrategy, model_PI: StochasticOfferingStrategy):
@@ -429,13 +533,17 @@ def run_optimization_for_different_scenarios(max_scenarios):
         # Run the model for non-perfect and perfect information
         model = StochasticOfferingStrategy(input_data)
         model.run()
+        da_profit, balancing_profit = model.calculate_profits()
+        total = da_profit + balancing_profit
         model_PI = StochasticOfferingStrategy(input_data, perfect_information=True)
         model_PI.run()
+        da_profit, balancing_profit = model_PI.calculate_profits()
+        total_PI = da_profit + balancing_profit
 
         # Store results
-        profits_non_perfect.append(model.results.objective_value)
-        profits_perfect.append(model_PI.results.objective_value)
-        evpi_values.append(model_PI.results.objective_value - model.results.objective_value)
+        profits_non_perfect.append(total)
+        profits_perfect.append(total_PI)
+        evpi_values.append(total_PI - total)
         num_scenarios_list.append(SCENARIOS)
 
     # Plot the results
@@ -469,8 +577,8 @@ if __name__ == '__main__':
         155.91, 154.10, 148.30, 138.59, 129.44, 122.89, 112.47
     ]
 
-    for s in range(1,SCENARIOS+1):
-        print(scenario_windProd[(12,s)])
+    #for s in range(1,SCENARIOS+1):
+        #print(scenario_windProd[(12,s)])
 
     #Equal probability of each scenario 1/100
     pi = 1/SCENARIOS
@@ -494,12 +602,20 @@ if __name__ == '__main__':
     model = StochasticOfferingStrategy(input_data)
     model.run()
     model.display_results()
-    model.plot_results()
+    #model.plot_results()
 
     model_PI = StochasticOfferingStrategy(input_data, perfect_information=True)
     model_PI.run()
     model_PI.display_results()
-    calculate_evpi(model, model_PI)
+
+    model_PI.get_extreme_scenarios(scenario_windProd)
+    #Scenario 19: minimum wind production
+    model_PI.display_results(scenario_num=19)
+    model_PI.plot_results(scenario_num=19)
+    #calculate_evpi(model, model_PI)
+    # #Scenario 13: maximum wind production
+    model_PI.plot_results(scenario_num=13)
+    model_PI.display_results(scenario_num=13)
 
     # Run the scenario simulation and plot the results
-    run_optimization_for_different_scenarios(max_scenarios=20)
+    #run_optimization_for_different_scenarios(max_scenarios=30)
