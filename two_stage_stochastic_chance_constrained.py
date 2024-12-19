@@ -250,6 +250,9 @@ class StochasticOfferingStrategy():
         self.results.soc = {
             (t, k): self.variables.soc[(t, k)].x for t in self.data.TIME for k in self.data.SCENARIOS
         }
+        self.results.calculated_revenue = {
+            self.calculate_profits()[0] + self.calculate_profits()[1]
+        }
 
     def run(self):
         self.model.optimize()
@@ -265,6 +268,27 @@ class StochasticOfferingStrategy():
                 print(f"Constraint {c.ConstrName}")
             raise RuntimeError(f"optimization of {self.model.ModelName} was not successful")
 
+    def calculate_profits(self, scenario_num=None):
+        da_profit = sum(
+            (self.data.da_price[t - 1] - self.data.generator_cost) * self.results.generator_production[t - 1]
+            for t in self.data.TIME
+        )
+        if scenario_num:
+            balancing_profit = sum(
+                (self.data.b_price[t, scenario_num] - self.data.generator_cost) * self.results.balancing_power[
+                    (t, scenario_num)]
+                for t in self.data.TIME
+            )
+        else:
+            total_balancing_profit = sum(
+                (self.data.b_price[t, k] - self.data.generator_cost) * self.results.balancing_power[
+                    (t, k)]
+                for t in self.data.TIME
+                for k in self.data.SCENARIOS
+            )
+            balancing_profit = total_balancing_profit / len(self.data.SCENARIOS)
+
+        return da_profit, balancing_profit
 
     def display_results(self):
         print()
@@ -273,6 +297,13 @@ class StochasticOfferingStrategy():
         print(self.results.objective_value)
         print("Optimal generator offer:")
         print(self.results.generator_production)
+        da_profit, balancing_profit = self.calculate_profits()
+        print("Total DA profit:")
+        print(da_profit)
+        print("Total Balancing profit:")
+        print(balancing_profit)
+        print("Total profit:")
+        print(balancing_profit + da_profit)
         print("--------------------------------------------------")
         print("Optimal balancing offer:")
         for k in self.data.SCENARIOS:
@@ -345,10 +376,12 @@ if __name__ == '__main__':
 
     epsilon_values = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
     revenues = []
+    revenues_list = []
 
     for epsilon in epsilon_values:
         model = StochasticOfferingStrategy(input_data, epsilon=epsilon)
         model.run()
-        revenues.append(model.results.objective_value)
-    plot_results(epsilon_values, revenues)
-    print(revenues)
+        revenues.append(model.results.calculated_revenue)
+    revenues_list = [value for single_set in revenues for value in single_set]
+    plot_results(epsilon_values, revenues_list)
+    print(revenues_list)
