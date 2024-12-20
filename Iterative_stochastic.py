@@ -15,9 +15,6 @@ results = {
     "DA_bid": {}
 }
 
-#SOC_st = []
-#SOC_st.append(0)
-
 n_sc = 20*20
 SOC_st = [{}]  # List of dictionaries to store SOC for each scenario at each time step
 initial_soc = 10
@@ -106,7 +103,6 @@ for h in range(1,25):
          24.947139937413866, 20.913987154615185, 23.277756558519155, 20.773859557669823, 22.443171461887,
          25.903047336543384, 28.37591189666934, 26.278558704228168, 25.909366451370115]
 
-        #SOC = SOC_st[-1]
         SOC = SOC_st[h-1]
 
         # Equal probability of each scenario 1/100
@@ -122,20 +118,16 @@ for h in range(1,25):
             da_price=scenario_DA_prices[h-1], # DA price
             b_price=scenario_B_prices, # Balancing price
             pi=pi,
-            rho_charge=0.8332,  # TODO what were the rho values before??
+            rho_charge=0.8332,
             rho_discharge=0.8332,
             SOC=SOC,
             soc_max=120,
-            soc_init=10, # I dont think I need it
+            soc_init=10,
             charging_capacity=100
         )
-    print('HEEEEEEEREEEEEEEEEE')
+
     print(f'Wind Prod for {h} {scenario_windProd}')
-    #print(f'DA prod for {h} {da_production[h-1]}')
-    #print(f'DA prices for {h} {scenario_DA_prices[h-1]}')
-    #print(f'B prices for {h} {scenario_B_prices}')
-    #print(f'SOC for {h} {SOC}')
-    #print('End Input Data')
+
 
     class Expando(object):
         '''
@@ -292,16 +284,12 @@ for h in range(1,25):
     results["DA_prices"][h] = scenario_DA_prices[h - 1]
     results["DA_bid"][h] = da_production[h -1]
 
-    #soc_value = sum(model.results.soc[(h, k)] for k in model.data.SCENARIOS)
-    #SOC_st.append(soc_value/SCENARIOS)
     scenario_SOC = {k: model.results.soc[(h, k)] for k in model.data.SCENARIOS}
     SOC_st.append(scenario_SOC)  # Store the dictionary for this hour
 
     #model.display_results()
 
 # Revenue
-print('here')
-
 rev = {
     "B_revenue": {},
     "DA_revenue": {},
@@ -322,7 +310,6 @@ for h in range(1, 25):
         rev["DA_revenue"][h] = (results["DA_prices"][h]-20) * (results["DA_bid"][h])
         rev["Total_revenue"][h][h, s] = rev["B_revenue"][h][h, s] + rev["DA_revenue"][h]
 
-#rev['bal_revenue'][]
 
 # Mean results
 mean_results = {
@@ -434,7 +421,6 @@ for h in range(1, 25):
     max_results["revenue_DA"][h] = rev["DA_revenue"][h]
     min_results["revenue_B"][h] = rev["B_revenue"][h][h, min_scenario]
     max_results["revenue_B"][h] = rev["B_revenue"][h][h, max_scenario]
-
 
     # Add scenario_DA_prices and da_production (no mean calculation needed)
     min_results["scenario_DA_prices"][h] = scenario_DA_prices[h - 1]

@@ -464,14 +464,11 @@ if __name__ == '__main__':
             charging_capacity=100
         )
 
-
     # Compute expected profits for a given alpha for beta 0-0.95:
     alpha_values = [0.95]
     beta_values = np.arange(0, 0.85, 0.05)
     #beta_values = [0.1]
     #results = [{'alpha': 0.95, 'beta': 0.0, 'objective_value': 20792224.527455278}, {'alpha': 0.95, 'beta': 0.05, 'objective_value': 19752613.301082462}, {'alpha': 0.95, 'beta': 0.1, 'objective_value': 18713002.074709874}, {'alpha': 0.95, 'beta': 0.15000000000000002, 'objective_value': 17673390.848336924}, {'alpha': 0.95, 'beta': 0.2, 'objective_value': 16633779.62196417}, {'alpha': 0.95, 'beta': 0.25, 'objective_value': 15594168.395591494}, {'alpha': 0.95, 'beta': 0.30000000000000004, 'objective_value': 14554557.169218712}, {'alpha': 0.95, 'beta': 0.35000000000000003, 'objective_value': 13514945.942846004}, {'alpha': 0.95, 'beta': 0.4, 'objective_value': 12475334.716473123}, {'alpha': 0.95, 'beta': 0.45, 'objective_value': 11435723.49010023}, {'alpha': 0.95, 'beta': 0.5, 'objective_value': 10396112.263727639}, {'alpha': 0.95, 'beta': 0.55, 'objective_value': 9356501.037354937}, {'alpha': 0.95, 'beta': 0.6000000000000001, 'objective_value': 8316889.810982084}, {'alpha': 0.95, 'beta': 0.65, 'objective_value': 7277278.584609356}, {'alpha': 0.95, 'beta': 0.7000000000000001, 'objective_value': 6237667.35823656}, {'alpha': 0.95, 'beta': 0.75, 'objective_value': 5198056.131863819}, {'alpha': 0.95, 'beta': 0.8, 'objective_value': 4158444.905491042}]
-
-
 
     results = run_riskaware_optimization(input_data, alpha_values, beta_values)
     #plot_results(results)
